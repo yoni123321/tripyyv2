@@ -1,5 +1,35 @@
 const { Pool } = require('pg');
 
+// Validate and parse DATABASE_URL
+const validateDatabaseUrl = (url) => {
+  try {
+    if (!url) {
+      throw new Error('DATABASE_URL is not set');
+    }
+    
+    // Check if it's a valid PostgreSQL URL
+    if (!url.startsWith('postgresql://') && !url.startsWith('postgres://')) {
+      throw new Error('DATABASE_URL must start with postgresql:// or postgres://');
+    }
+    
+    // Parse the URL to validate format
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname || !parsedUrl.port || !parsedUrl.pathname) {
+      throw new Error('Invalid DATABASE_URL format');
+    }
+    
+    console.log('✅ DATABASE_URL format is valid');
+    console.log('🔗 Host:', parsedUrl.hostname);
+    console.log('🔗 Port:', parsedUrl.port);
+    console.log('🔗 Database:', parsedUrl.pathname.slice(1));
+    
+    return true;
+  } catch (error) {
+    console.error('❌ DATABASE_URL validation failed:', error.message);
+    return false;
+  }
+};
+
 // Railway automatically provides DATABASE_URL environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -9,6 +39,20 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   max: 20,
   min: 2
+});
+
+// Add error handling for the pool
+pool.on('error', (err) => {
+  console.error('❌ Unexpected error on idle client', err);
+  process.exit(-1);
+});
+
+pool.on('connect', (client) => {
+  console.log('🔗 New client connected to database');
+});
+
+pool.on('remove', (client) => {
+  console.log('🔗 Client removed from database pool');
 });
 
 // Initialize database tables
@@ -129,6 +173,11 @@ const testConnection = async () => {
       return false;
     }
     
+    // Validate DATABASE_URL format
+    if (!validateDatabaseUrl(process.env.DATABASE_URL)) {
+      return false;
+    }
+    
     const result = await pool.query('SELECT NOW()');
     console.log('✅ Database connection successful:', result.rows[0].now);
     return true;
@@ -139,7 +188,8 @@ const testConnection = async () => {
       nodeEnv: process.env.NODE_ENV,
       errorCode: error.code,
       errorAddress: error.address,
-      errorPort: error.port
+      errorPort: error.port,
+      fullError: error.stack
     });
     return false;
   }
