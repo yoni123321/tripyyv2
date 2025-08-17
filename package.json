@@ -1,0 +1,41 @@
+{
+  "name": "tripyy-backend",
+  "version": "1.0.0",
+  "description": "Tripyy backend API server",
+  "main": "server-simple.js",
+  "scripts": {
+    "start": "node server-simple.js",
+    "prod": "node server-simple.js",
+    "dev": "nodemon server-simple.js",
+    "migrate": "node migrate-data.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@paypal/checkout-server-sdk": "^1.0.3",
+    "@paypal/paypal-server-sdk": "^1.1.0",
+    "axios": "^1.11.0",
+    "bcryptjs": "^2.4.3",
+    "checkout-sdk-node": "^2.8.0",
+    "cloudinary": "^2.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "joi": "^18.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "pg": "^8.11.3",
+    "stripe": "^18.4.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.17.0"
+  },
+  "keywords": [
+    "tripyy",
+    "travel",
+    "api",
+    "backend"
+  ],
+  "author": "Yoni",
+  "license": "MIT"
+}
