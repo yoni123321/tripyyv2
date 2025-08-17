@@ -1282,7 +1282,7 @@ app.post('/api/posts/:postId/like', authenticateUser, async (req, res) => {
 });
 
 // Post comment endpoint
-app.post('/api/posts/:postId/comments', authenticateUser, (req, res) => {
+app.post('/api/posts/:postId/comments', authenticateUser, async (req, res) => {
   try {
     const { postId } = req.params;
     const { comment } = req.body;
@@ -1291,34 +1291,19 @@ app.post('/api/posts/:postId/comments', authenticateUser, (req, res) => {
       return res.status(400).json({ error: 'Comment text is required' });
     }
 
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the post in all users' posts
-    let foundPost = null;
-    let foundUser = null;
-    
-    for (const [email, userData] of users) {
-      if (userData.posts) {
-        const post = userData.posts.find(p => p.id === postId);
-        if (post) {
-          foundPost = post;
-          foundUser = userData;
-          break;
-        }
-      }
-    }
-
+    // Find the post in database
+    const foundPost = await dbService.getPostById(postId);
     if (!foundPost) {
       return res.status(404).json({ error: 'Post not found' });
     }
 
     // Initialize comments array if it doesn't exist
-    if (!foundPost.comments) {
-      foundPost.comments = [];
-    }
+    const currentComments = foundPost.comments || [];
 
     // Add comment with rich user info
     const newComment = {
@@ -1327,21 +1312,24 @@ app.post('/api/posts/:postId/comments', authenticateUser, (req, res) => {
       userId: user.id,
       userEmail: user.email,
       userName: user.name,
-      userNickname: user.travelerProfile?.nickname || user.name,
-      userPhoto: user.travelerProfile?.photo || null,
+      userNickname: user.traveler_profile?.nickname || user.name,
+      userPhoto: user.traveler_profile?.photo || null,
       likes: [],
       createdAt: new Date().toISOString()
     };
 
-    foundPost.comments.push(newComment);
-    foundPost.commentCount = foundPost.comments.length;
+    currentComments.push(newComment);
     
-    saveData();
+    // Update post in database
+    const updatedPost = await dbService.updatePost(postId, {
+      comments: currentComments,
+      comment_count: currentComments.length
+    });
     
     console.log(`💬 Comment added to post ${postId} by ${newComment.userNickname}`);
     res.json({ 
       success: true, 
-      post: foundPost,
+      post: updatedPost,
       comment: newComment
     });
   } catch (error) {
@@ -1351,22 +1339,16 @@ app.post('/api/posts/:postId/comments', authenticateUser, (req, res) => {
 });
 
 // Like a specific comment on a post
-app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, (req, res) => {
+app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, async (req, res) => {
   try {
     const { postId, commentId } = req.params;
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the post
-    let foundPost = null;
-    for (const [, userData] of users) {
-      if (userData.posts) {
-        const post = userData.posts.find(p => p.id === postId);
-        if (post) { foundPost = post; break; }
-      }
-    }
+    // Find the post in database
+    const foundPost = await dbService.getPostById(postId);
     if (!foundPost) return res.status(404).json({ error: 'Post not found' });
 
     // Find comment
@@ -1374,15 +1356,17 @@ app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, (req, 
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
     if (!Array.isArray(comment.likes)) comment.likes = [];
-    const nickname = user.travelerProfile?.nickname || user.name;
+    const nickname = user.traveler_profile?.nickname || user.name;
     const idx = comment.likes.indexOf(nickname);
     if (idx === -1) comment.likes.push(nickname); else comment.likes.splice(idx, 1);
 
-    // Update counts
-    foundPost.commentCount = (foundPost.comments || []).length;
-    foundPost.likeCount = (foundPost.likes || []).length;
-    saveData();
-    res.json({ success: true, post: foundPost });
+    // Update post in database with updated comments
+    const updatedPost = await dbService.updatePost(postId, {
+      comments: foundPost.comments,
+      comment_count: foundPost.comments.length
+    });
+    
+    res.json({ success: true, post: updatedPost });
   } catch (error) {
     console.error('❌ Error liking comment:', error);
     res.status(500).json({ error: 'Failed to like comment' });
@@ -1390,7 +1374,7 @@ app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, (req, 
 });
 
 // POI review like endpoint
-app.post('/api/pois/review/like', authenticateUser, (req, res) => {
+app.post('/api/pois/review/like', authenticateUser, async (req, res) => {
   try {
     const { reviewId } = req.body;
     
@@ -1398,16 +1382,17 @@ app.post('/api/pois/review/like', authenticateUser, (req, res) => {
       return res.status(400).json({ error: 'Review ID is required' });
     }
 
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the review in all POIs
+    // Find the review in all POIs by searching through database
+    const allPois = await dbService.getAllPOIs();
     let foundReview = null;
     let foundPoi = null;
     
-    for (const poi of pois) {
+    for (const poi of allPois) {
       if (poi.reviews) {
         const review = poi.reviews.find(r => r.id === reviewId);
         if (review) {
@@ -1428,7 +1413,7 @@ app.post('/api/pois/review/like', authenticateUser, (req, res) => {
     }
 
     // Toggle like
-    const userNickname = user.travelerProfile?.nickname || user.name;
+    const userNickname = user.traveler_profile?.nickname || user.name;
     const likeIndex = foundReview.likes.indexOf(userNickname);
     
     if (likeIndex === -1) {
@@ -1439,7 +1424,10 @@ app.post('/api/pois/review/like', authenticateUser, (req, res) => {
       foundReview.likes.splice(likeIndex, 1);
     }
     
-    saveData();
+    // Update POI in database
+    await dbService.updatePOI(foundPoi.id, {
+      reviews: foundPoi.reviews
+    });
     
     console.log(`👍 Review ${reviewId} ${likeIndex === -1 ? 'liked' : 'unliked'} by ${userNickname}`);
     res.json({ 
@@ -1453,65 +1441,57 @@ app.post('/api/pois/review/like', authenticateUser, (req, res) => {
   }
 });
 
-// Helper function to get full user objects from user IDs
-const getFullUserObjects = (userIds) => {
-  return userIds.map(userId => {
-    const user = Array.from(users.values()).find(u => u.id === userId);
+// Helper function to get full user objects from user IDs (database version)
+const getFullUserObjects = async (userIds) => {
+  const users = [];
+  for (const userId of userIds) {
+    const user = await dbService.getUserById(userId);
     if (user) {
-      return {
+      users.push({
         id: user.id,
         name: user.name,
-        nickname: user.nickname || user.travelerProfile?.nickname,
+        nickname: user.traveler_profile?.nickname,
         email: user.email,
-        photo: user.photo || user.travelerProfile?.photo,
-        travelerProfile: user.travelerProfile
-      };
+        photo: user.traveler_profile?.photo,
+        travelerProfile: user.traveler_profile
+      });
     }
-    return null;
-  }).filter(user => user !== null);
+  }
+  return users;
 };
 
 // Community join endpoint
-app.post('/api/communities/:communityId/join', authenticateUser, (req, res) => {
+app.post('/api/communities/:communityId/join', authenticateUser, async (req, res) => {
   try {
     const { communityId } = req.params;
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the community
-    let foundCommunity = null;
-    let foundUser = null;
-    
-    for (const [email, userData] of users) {
-      if (userData.communities) {
-        const community = userData.communities.find(c => c.id === communityId);
-        if (community) {
-          foundCommunity = community;
-          foundUser = userData;
-          break;
-        }
-      }
-    }
-
+    // Find the community in database
+    const foundCommunity = await dbService.getCommunityById(communityId);
     if (!foundCommunity) {
       return res.status(404).json({ error: 'Community not found' });
     }
 
     // Add user to community members if not already a member
-    if (!foundCommunity.members.includes(user.id)) {
-      foundCommunity.members.push(user.id);
+    const currentMembers = foundCommunity.members || [];
+    if (!currentMembers.includes(user.id)) {
+      currentMembers.push(user.id);
     }
     
-    saveData();
+    // Update community in database
+    const updatedCommunity = await dbService.updateCommunity(communityId, {
+      members: currentMembers
+    });
     
     console.log(`👥 User ${user.id} joined community ${communityId}`);
     
     // Return enriched community data with full user objects
     const enrichedCommunity = {
-      ...foundCommunity,
-      members: getFullUserObjects(foundCommunity.members)
+      ...updatedCommunity,
+      members: await getFullUserObjects(currentMembers)
     };
     
     res.json({ 
