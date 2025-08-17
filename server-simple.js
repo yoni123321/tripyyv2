@@ -1095,34 +1095,34 @@ app.put('/api/pois', authenticateUser, async (req, res) => {
 });
 
 // Delete an existing public POI (by coordinates)
-app.delete('/api/pois', authenticateUser, (req, res) => {
+app.delete('/api/pois', authenticateUser, async (req, res) => {
   try {
     const { coordinates } = req.body || {};
     if (!coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lng !== 'number') {
       return res.status(400).json({ error: 'Valid coordinates are required' });
     }
 
-    const idx = pois.findIndex(p => p.coordinates.lat === coordinates.lat && p.coordinates.lng === coordinates.lng);
-    if (idx === -1) {
+    // Find POI by coordinates using database service
+    const poi = await dbService.getPOIByCoordinates(coordinates.lat, coordinates.lng);
+    if (!poi) {
       return res.status(404).json({ error: 'POI not found' });
     }
 
     // Authorization: only the creator can delete (by user id or author nickname)
-    const poi = pois[idx];
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    const isOwner = (poi.user?.id && poi.user.id === user.id) || (poi.author && (poi.author === (user.travelerProfile?.nickname || user.name)));
+    const isOwner = (poi.user_id && poi.user_id === user.id) || (poi.author && (poi.author === (user.traveler_profile?.nickname || user.name)));
     if (!isOwner) {
       return res.status(403).json({ error: 'Not authorized to delete this POI' });
     }
 
-    const deleted = pois.splice(idx, 1)[0];
-    saveData();
+    // Delete POI from database
+    const deleted = await dbService.deletePOI(poi.id);
 
     // Attempt to delete Cloudinary photo if the POI used one
     try {
-      if (deleted && deleted.photo && typeof deleted.photo === 'string' && deleted.photo.startsWith('https://res.cloudinary.com/')) {
-        const publicId = extractCloudinaryPublicId(deleted.photo);
+      if (deleted && deleted.photos && Array.isArray(deleted.photos) && deleted.photos[0] && typeof deleted.photos[0] === 'string' && deleted.photos[0].startsWith('https://res.cloudinary.com/')) {
+        const publicId = extractCloudinaryPublicId(deleted.photos[0]);
         if (publicId) {
           cloudinary.uploader.destroy(publicId, (err, result) => {
             if (err) {
@@ -1164,7 +1164,7 @@ function extractCloudinaryPublicId(url) {
 }
 
 // POI review endpoint
-app.post('/api/pois/review', authenticateUser, (req, res) => {
+app.post('/api/pois/review', authenticateUser, async (req, res) => {
   try {
     const { coordinates, rating, text, author, authorPhoto, photo } = req.body;
     
@@ -1172,62 +1172,59 @@ app.post('/api/pois/review', authenticateUser, (req, res) => {
       return res.status(400).json({ error: 'Coordinates, rating, and text are required' });
     }
 
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
     // Find existing POI at these coordinates or create a new one
-    let poi = pois.find(p => 
-      p.coordinates.lat === coordinates.lat && 
-      p.coordinates.lng === coordinates.lng
-    );
+    let poi = await dbService.getPOIByCoordinates(coordinates.lat, coordinates.lng);
 
     if (!poi) {
       // Create a new POI
-      poi = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
+      const newPoi = {
         name: 'Unknown Location',
         coordinates,
         user: { id: user.id, email: user.email, name: user.name },
         createdAt: new Date().toISOString(),
         reviews: [],
         type: 'public',
-        author: user.travelerProfile?.nickname || user.name || '',
+        author: user.traveler_profile?.nickname || user.name || '',
       };
-      pois.push(poi);
+      poi = await dbService.createPOI(newPoi);
     }
 
-    // Initialize reviews array if it doesn't exist
-    if (!poi.reviews) {
-      poi.reviews = [];
-    }
-
-    // Add review
+    // Get current reviews and add new review
+    const currentReviews = poi.reviews || [];
     const newReview = {
       id: Date.now().toString() + Math.random().toString(36).slice(2),
       rating,
       text: text.trim(),
-      author: author || user.travelerProfile?.nickname || user.name,
-      authorPhoto: authorPhoto || user.travelerProfile?.photo || null,
+      author: author || user.traveler_profile?.nickname || user.name,
+      authorPhoto: authorPhoto || user.traveler_profile?.photo || null,
       photo: photo || null,
       createdAt: new Date().toISOString(),
       likes: []
     };
 
-    poi.reviews.push(newReview);
+    currentReviews.push(newReview);
     
     // Calculate average rating
-    const totalRating = poi.reviews.reduce((sum, review) => sum + review.rating, 0);
-    poi.averageRating = totalRating / poi.reviews.length;
-    poi.reviewCount = poi.reviews.length;
+    const totalRating = currentReviews.reduce((sum, review) => sum + review.rating, 0);
+    const averageRating = totalRating / currentReviews.length;
+    const reviewCount = currentReviews.length;
     
-    saveData();
+    // Update POI with new review
+    const updatedPoi = await dbService.updatePOI(poi.id, {
+      reviews: currentReviews,
+      average_rating: averageRating,
+      review_count: reviewCount
+    });
     
     console.log(`📝 Review added to POI at ${coordinates.lat}, ${coordinates.lng} by ${newReview.author}`);
     res.json({ 
       success: true, 
-      poi,
+      poi: updatedPoi,
       review: newReview
     });
   } catch (error) {
@@ -1237,59 +1234,45 @@ app.post('/api/pois/review', authenticateUser, (req, res) => {
 });
 
 // Post like endpoint
-app.post('/api/posts/:postId/like', authenticateUser, (req, res) => {
+app.post('/api/posts/:postId/like', authenticateUser, async (req, res) => {
   try {
     const { postId } = req.params;
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the post in all users' posts
-    let foundPost = null;
-    let foundUser = null;
-    
-    for (const [email, userData] of users) {
-      if (userData.posts) {
-        const post = userData.posts.find(p => p.id === postId);
-        if (post) {
-          foundPost = post;
-          foundUser = userData;
-          break;
-        }
-      }
-    }
-
+    // Find the post in database
+    const foundPost = await dbService.getPostById(postId);
     if (!foundPost) {
       return res.status(404).json({ error: 'Post not found' });
     }
 
     // Initialize likes array if it doesn't exist
-    if (!foundPost.likes) {
-      foundPost.likes = [];
-    }
-
+    const currentLikes = foundPost.likes || [];
+    
     // Toggle like
-    const userNickname = user.travelerProfile?.nickname || user.name;
-    const likeIndex = foundPost.likes.indexOf(userNickname);
+    const userNickname = user.traveler_profile?.nickname || user.name;
+    const likeIndex = currentLikes.indexOf(userNickname);
     
     if (likeIndex === -1) {
       // Add like
-      foundPost.likes.push(userNickname);
+      currentLikes.push(userNickname);
     } else {
       // Remove like
-      foundPost.likes.splice(likeIndex, 1);
+      currentLikes.splice(likeIndex, 1);
     }
 
-    // Update like count
-    foundPost.likeCount = foundPost.likes.length;
-    
-    saveData();
+    // Update post in database
+    const updatedPost = await dbService.updatePost(postId, {
+      likes: currentLikes,
+      like_count: currentLikes.length
+    });
     
     console.log(`👍 Post ${postId} ${likeIndex === -1 ? 'liked' : 'unliked'} by ${userNickname}`);
     res.json({ 
       success: true, 
-      post: foundPost,
+      post: updatedPost,
       liked: likeIndex === -1
     });
   } catch (error) {
