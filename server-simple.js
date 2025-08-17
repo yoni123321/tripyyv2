@@ -171,12 +171,16 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     message: 'Tripyy Backend is running',
     timestamp: new Date().toISOString(),
-    usersCount: users.size,
-    tripsCount: trips.size
+    database: 'Connected',
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Authentication endpoints
+// Authentication endpoints - TEMPORARILY DISABLED FOR MIGRATION
+app.post('/api/auth/register', async (req, res) => {
+  res.status(503).json({ error: 'Registration temporarily disabled during database migration' });
+});
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
@@ -201,8 +205,9 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Name must be at least 2 characters long' });
     }
 
-    // Check if user already exists
-    if (users.has(email)) {
+    // Check if user already exists using database
+    const existingUser = await dbService.getUserByEmail(email);
+    if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
@@ -244,10 +249,8 @@ app.post('/api/auth/register', async (req, res) => {
       savedAgents: []
     };
 
-    users.set(email, user);
-    
-    // Save data to file
-    saveData();
+    // Save user to database
+    const savedUser = await dbService.createUser(user);
 
     // Generate token
     const token = generateToken(userId);
@@ -282,8 +285,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    // Find user
-    const user = users.get(email);
+    // Find user in database
+    const user = await dbService.getUserByEmail(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -302,8 +305,8 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
+    // Update last login in database
+    await dbService.updateUser(email, { lastLogin: new Date() });
 
     // Generate token
     const token = generateToken(user.id);
@@ -338,14 +341,15 @@ app.post('/api/auth/send-verification', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    // Check if user exists
-    const user = users.get(email);
+    // Check if user exists in database
+    const user = await dbService.getUserByEmail(email);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Generate verification token
     const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Store verification token in database (temporary in-memory for now)
     emailVerificationTokens.set(email, {
       token: verificationToken,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -386,20 +390,20 @@ app.post('/api/auth/verify-email', async (req, res) => {
       return res.status(400).json({ error: 'Verification token has expired' });
     }
 
-    // Find user and mark as verified
-    const user = users.get(email);
+    // Find user and mark as verified in database
+    const user = await dbService.getUserByEmail(email);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    user.emailVerified = true;
-    user.emailVerifiedAt = new Date();
+    // Update user verification status in database
+    await dbService.updateUser(email, {
+      emailVerified: true,
+      emailVerifiedAt: new Date()
+    });
     
     // Remove verification token
     emailVerificationTokens.delete(email);
-    
-    // Save data
-    saveData();
 
     console.log(`✅ Email verified for user: ${email}`);
 
@@ -419,11 +423,12 @@ app.post('/api/auth/verify-email', async (req, res) => {
 });
 
 // User profile endpoints
-app.get('/api/user/traveler-profile', authenticateUser, (req, res) => {
+app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   try {
     console.log(`👤 Getting traveler profile for user: ${req.userId}`);
     
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    // Get user from database by ID
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       console.log(`❌ User not found: ${req.userId}`);
       return res.status(404).json({ error: 'User not found' });
@@ -439,13 +444,14 @@ app.get('/api/user/traveler-profile', authenticateUser, (req, res) => {
   }
 });
 
-app.put('/api/user/traveler-profile', authenticateUser, (req, res) => {
+app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   try {
     const { travelerProfile } = req.body;
     console.log(`💾 Updating traveler profile for user: ${req.userId}`);
     console.log(`📝 New profile data:`, JSON.stringify(travelerProfile, null, 2));
     
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    // Get user from database by ID
+    const user = await dbService.getUserById(req.userId);
     
     if (!user) {
       console.log(`❌ User not found: ${req.userId}`);
@@ -455,10 +461,10 @@ app.put('/api/user/traveler-profile', authenticateUser, (req, res) => {
     console.log(`✅ Found user: ${user.email}`);
     console.log(`📝 Previous profile:`, JSON.stringify(user.travelerProfile, null, 2));
     
-    user.travelerProfile = { ...user.travelerProfile, ...travelerProfile };
-    
-    // Save data to file
-    saveData();
+    // Update user profile in database
+    await dbService.updateUser(user.email, {
+      travelerProfile: { ...user.travelerProfile, ...travelerProfile }
+    });
     
     console.log(`✅ Profile updated successfully`);
     console.log(`📝 Updated profile:`, JSON.stringify(user.travelerProfile, null, 2));
@@ -474,15 +480,15 @@ app.put('/api/user/traveler-profile', authenticateUser, (req, res) => {
 });
 
 // User stats endpoint
-app.get('/api/user/stats', authenticateUser, (req, res) => {
+app.get('/api/user/stats', authenticateUser, async (req, res) => {
   try {
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Calculate stats from user data
-    const userTrips = Array.from(trips.values()).filter(trip => trip.userId === req.userId);
+    // Calculate stats from database
+    const userTrips = await dbService.getUserTrips(req.userId);
     const userFriends = user.friends || [];
     const userLikes = user.likes || 0;
 
@@ -497,18 +503,18 @@ app.get('/api/user/stats', authenticateUser, (req, res) => {
     console.error('Get user stats error:', error);
     res.status(500).json({ error: 'Failed to get user stats' });
   }
-});
+ });
 
-app.get('/api/user/stats/:userId', authenticateUser, (req, res) => {
+app.get('/api/user/stats/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = Array.from(users.values()).find(u => u.id === userId);
+    const user = await dbService.getUserById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Calculate stats from user data
-    const userTrips = Array.from(trips.values()).filter(trip => trip.userId === userId);
+    // Calculate stats from database
+    const userTrips = await dbService.getUserTrips(userId);
     const userFriends = user.friends || [];
     const userLikes = user.likes || 0;
 
@@ -526,9 +532,9 @@ app.get('/api/user/stats/:userId', authenticateUser, (req, res) => {
 });
 
 // User friends endpoint
-app.get('/api/user/friends', authenticateUser, (req, res) => {
+app.get('/api/user/friends', authenticateUser, async (req, res) => {
   try {
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -536,15 +542,8 @@ app.get('/api/user/friends', authenticateUser, (req, res) => {
     // Get full friend objects from friend IDs
     const friendsList = [];
     if (user.friends && Array.isArray(user.friends)) {
-      user.friends.forEach(friendId => {
-        // Find friend by ID in the users map
-        let friend = null;
-        for (const [email, userData] of users) {
-          if (userData.id === friendId) {
-            friend = userData;
-            break;
-          }
-        }
+      for (const friendId of user.friends) {
+        const friend = await dbService.getUserById(friendId);
         if (friend) {
           friendsList.push({
             id: friend.id,
@@ -554,7 +553,7 @@ app.get('/api/user/friends', authenticateUser, (req, res) => {
             lastKnownLocation: friend.lastKnownLocation
           });
         }
-      });
+      }
     }
     
     console.log(`👥 Friends for user ${req.userId}:`, friendsList.map(f => f.name));
@@ -566,16 +565,16 @@ app.get('/api/user/friends', authenticateUser, (req, res) => {
 });
 
 // LLM config endpoints
-app.get('/api/user/llm-config', authenticateUser, (req, res) => {
+app.get('/api/user/llm-config', authenticateUser, async (req, res) => {
   try {
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     res.json({ 
-      llmConfig: user.llmConfig,
-      savedAgents: user.savedAgents 
+      llmConfig: user.llm_config,
+      savedAgents: user.saved_agents 
     });
   } catch (error) {
     console.error('Get LLM config error:', error);
@@ -583,27 +582,30 @@ app.get('/api/user/llm-config', authenticateUser, (req, res) => {
   }
 });
 
-app.put('/api/user/llm-config', authenticateUser, (req, res) => {
+app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
   try {
     const { llmConfig, savedAgents } = req.body;
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Update user in database
+    const updateData = {};
     if (llmConfig) {
-      user.llmConfig = { ...user.llmConfig, ...llmConfig };
+      updateData.llmConfig = { ...user.llm_config, ...llmConfig };
+    }
+    if (savedAgents) {
+      updateData.savedAgents = savedAgents;
     }
 
-    if (savedAgents) {
-      user.savedAgents = savedAgents;
-    }
+    const updatedUser = await dbService.updateUser(user.email, updateData);
 
     res.json({ 
       message: 'LLM config updated successfully',
-      llmConfig: user.llmConfig,
-      savedAgents: user.savedAgents 
+      llmConfig: updatedUser.llm_config,
+      savedAgents: updatedUser.saved_agents 
     });
   } catch (error) {
     console.error('Update LLM config error:', error);

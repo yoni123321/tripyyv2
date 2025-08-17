@@ -33,24 +33,59 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async getUserById(userId) {
+    const query = 'SELECT * FROM users WHERE id = $1';
+    const result = await pool.query(query, [userId]);
+    return result.rows[0];
+  }
+
   async updateUser(email, updates) {
+    // Build dynamic update query based on what's provided
+    const updateFields = [];
+    const values = [];
+    let valueIndex = 1;
+    
+    if (updates.lastLogin !== undefined) {
+      updateFields.push(`last_login = $${valueIndex++}`);
+      values.push(updates.lastLogin);
+    }
+    if (updates.emailVerified !== undefined) {
+      updateFields.push(`email_verified = $${valueIndex++}`);
+      values.push(updates.emailVerified);
+    }
+    if (updates.emailVerifiedAt !== undefined) {
+      updateFields.push(`email_verified_at = $${valueIndex++}`);
+      values.push(updates.emailVerifiedAt);
+    }
+    if (updates.preferences !== undefined) {
+      updateFields.push(`preferences = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.preferences));
+    }
+    if (updates.travelerProfile !== undefined) {
+      updateFields.push(`traveler_profile = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.travelerProfile));
+    }
+    if (updates.llmConfig !== undefined) {
+      updateFields.push(`llm_config = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.llmConfig));
+    }
+    if (updates.savedAgents !== undefined) {
+      updateFields.push(`saved_agents = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.savedAgents));
+    }
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid update fields provided');
+    }
+    
+    values.push(email); // email is always the last parameter
+    
     const query = `
       UPDATE users 
-      SET last_login = $1, email_verified = $2, email_verified_at = $3, preferences = $4, traveler_profile = $5, llm_config = $6, saved_agents = $7
-      WHERE email = $8
+      SET ${updateFields.join(', ')}
+      WHERE email = $${valueIndex}
       RETURNING *
     `;
-    
-    const values = [
-      updates.lastLogin,
-      updates.emailVerified,
-      updates.emailVerifiedAt,
-      JSON.stringify(updates.preferences || {}),
-      JSON.stringify(updates.travelerProfile || {}),
-      JSON.stringify(updates.llmConfig || {}),
-      JSON.stringify(updates.savedAgents || []),
-      email
-    ];
     
     const result = await pool.query(query, values);
     return result.rows[0];
