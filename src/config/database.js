@@ -3,12 +3,21 @@ const { Pool } = require('pg');
 // Railway automatically provides DATABASE_URL environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // Add connection timeout and retry settings
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 20,
+  min: 2
 });
 
 // Initialize database tables
 const initDatabase = async () => {
   try {
+    console.log('🗄️ Initializing database tables...');
+    console.log('🔗 Database URL:', process.env.DATABASE_URL ? 'Set' : 'Missing');
+    console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+    
     // Users table with all needed fields
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -112,11 +121,26 @@ const initDatabase = async () => {
 // Test database connection
 const testConnection = async () => {
   try {
+    console.log('🔍 Testing database connection...');
+    console.log('🔗 DATABASE_URL exists:', !!process.env.DATABASE_URL);
+    
+    if (!process.env.DATABASE_URL) {
+      console.error('❌ DATABASE_URL environment variable is not set');
+      return false;
+    }
+    
     const result = await pool.query('SELECT NOW()');
     console.log('✅ Database connection successful:', result.rows[0].now);
     return true;
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
+    console.error('❌ Database connection failed:', error.message);
+    console.error('🔍 Connection details:', {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      nodeEnv: process.env.NODE_ENV,
+      errorCode: error.code,
+      errorAddress: error.address,
+      errorPort: error.port
+    });
     return false;
   }
 };

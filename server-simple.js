@@ -44,10 +44,16 @@ function loadData() {
 */
 async function initializeServer() {
   try {
+    console.log('🚀 Starting Tripyy Backend Server...');
+    console.log('🔧 Environment:', process.env.NODE_ENV || 'development');
+    console.log('🔗 Database URL:', process.env.DATABASE_URL ? 'Configured' : 'Missing');
+    
     // Test database connection
     const isConnected = await testConnection();
     if (!isConnected) {
       console.error('❌ Cannot start server without database connection');
+      console.error('💡 Make sure DATABASE_URL is set in Railway environment variables');
+      console.error('💡 Check that PostgreSQL service is running and connected');
       process.exit(1);
     }
     
@@ -59,6 +65,7 @@ async function initializeServer() {
     startServer();
   } catch (error) {
     console.error('❌ Server initialization failed:', error);
+    console.error('💡 Check Railway logs for more details');
     process.exit(1);
   }
 }
@@ -1658,6 +1665,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Network accessible at: http://${hostIp}:${PORT}`);
   console.log(`📡 GitHub AI: ${process.env.GITHUB_AI ? '✅' : '❌'}`);
   console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
-  console.log(`🗄️ Database: ✅ In-Memory (Testing Mode)`);
+      console.log(`🗄️ Database: ✅ PostgreSQL (Production Ready)`);
   console.log(`🔗 CORS enabled for cross-origin requests`);
 }); 
