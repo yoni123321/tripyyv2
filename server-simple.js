@@ -47,7 +47,10 @@ async function initializeServer() {
 // Database operations are now handled by dbService
 
 // Initialize server with database
-initializeServer();
+initializeServer().catch(error => {
+  console.error('❌ Fatal error during server initialization:', error);
+  process.exit(1);
+});
 
 // Database cleanup will be handled by database service
 
@@ -125,15 +128,35 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  console.log('🏥 Health check requested');
-  res.json({
-    status: 'ok',
-    message: 'Tripyy Backend is running',
-    timestamp: new Date().toISOString(),
-    database: 'Connected',
-    environment: process.env.NODE_ENV || 'development'
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    console.log('🏥 Health check requested');
+    
+    // Test database connection
+    let dbStatus = 'Unknown';
+    try {
+      const isConnected = await testConnection();
+      dbStatus = isConnected ? 'Connected' : 'Failed';
+    } catch (error) {
+      dbStatus = 'Error: ' + error.message;
+    }
+    
+    res.json({
+      status: 'ok',
+      message: 'Tripyy Backend is running',
+      timestamp: new Date().toISOString(),
+      database: dbStatus,
+      environment: process.env.NODE_ENV || 'development',
+      databaseUrl: process.env.DATABASE_URL ? 'Set' : 'Missing'
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
 });
 
 // Authentication endpoints - TEMPORARILY DISABLED FOR MIGRATION
@@ -1609,6 +1632,16 @@ app.post('/api/communities/:communityId/leave', authenticateUser, async (req, re
     console.error('❌ Error leaving community:', error);
     res.status(500).json({ error: 'Failed to leave community' });
   }
+});
+
+// Global error handler
+app.use((error, req, res, next) => {
+  console.error('❌ Unhandled error:', error);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: error.message,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start server function
