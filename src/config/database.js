@@ -173,6 +173,10 @@ const testConnection = async () => {
       return false;
     }
     
+    // Debug: Show DATABASE_URL structure (mask password)
+    const debugUrl = process.env.DATABASE_URL.replace(/:([^@]+)@/, ':****@');
+    console.log('🔍 DATABASE_URL structure:', debugUrl);
+    
     // Validate DATABASE_URL format
     if (!validateDatabaseUrl(process.env.DATABASE_URL)) {
       return false;
