@@ -127,11 +127,98 @@ class DatabaseService {
     return result.rows;
   }
 
+  async getTripById(tripId) {
+    const query = 'SELECT * FROM trips WHERE id = $1';
+    const result = await pool.query(query, [tripId]);
+    return result.rows[0];
+  }
+
+  async updateTrip(tripId, updates) {
+    const updateFields = [];
+    const values = [];
+    let valueIndex = 1;
+    
+    if (updates.name !== undefined) {
+      updateFields.push(`name = $${valueIndex++}`);
+      values.push(updates.name);
+    }
+    if (updates.destination !== undefined) {
+      updateFields.push(`destination = $${valueIndex++}`);
+      values.push(updates.destination);
+    }
+    if (updates.start_date !== undefined) {
+      updateFields.push(`start_date = $${valueIndex++}`);
+      values.push(updates.start_date);
+    }
+    if (updates.end_date !== undefined) {
+      updateFields.push(`end_date = $${valueIndex++}`);
+      values.push(updates.end_date);
+    }
+    if (updates.itinerary !== undefined) {
+      updateFields.push(`itinerary = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.itinerary));
+    }
+    if (updates.preferences !== undefined) {
+      updateFields.push(`preferences = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.preferences));
+    }
+    if (updates.traveler_profile !== undefined) {
+      updateFields.push(`traveler_profile = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.traveler_profile));
+    }
+    if (updates.budget !== undefined) {
+      updateFields.push(`budget = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.budget));
+    }
+    if (updates.tips !== undefined) {
+      updateFields.push(`tips = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.tips));
+    }
+    if (updates.suggestions !== undefined) {
+      updateFields.push(`suggestions = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.suggestions));
+    }
+    if (updates.is_public !== undefined) {
+      updateFields.push(`is_public = $${valueIndex++}`);
+      values.push(updates.is_public);
+    }
+    if (updates.share_type !== undefined) {
+      updateFields.push(`share_type = $${valueIndex++}`);
+      values.push(updates.share_type);
+    }
+    
+    // Always update the updated_at timestamp
+    updateFields.push(`updated_at = $${valueIndex++}`);
+    values.push(new Date());
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid update fields provided');
+    }
+    
+    values.push(tripId); // tripId is always the last parameter
+    
+    const query = `
+      UPDATE trips 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  async deleteTrip(tripId) {
+    const query = 'DELETE FROM trips WHERE id = $1 RETURNING *';
+    const result = await pool.query(query, [tripId]);
+    return result.rows[0];
+  }
+
   // POI operations
   async createPOI(poiData) {
     const query = `
-      INSERT INTO pois (name, description, location, photos, created_at)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO pois (name, description, location, photos, icon, type, author, user_id, reviews, average_rating, review_count, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
     
@@ -140,6 +227,13 @@ class DatabaseService {
       poiData.description || '',
       JSON.stringify(poiData.coordinates),
       JSON.stringify([poiData.photo]),
+      poiData.icon || '',
+      poiData.type || 'public',
+      poiData.author || '',
+      poiData.user?.id,
+      JSON.stringify(poiData.reviews || []),
+      poiData.averageRating || 0,
+      poiData.reviewCount || 0,
       poiData.createdAt
     ];
     
@@ -153,11 +247,74 @@ class DatabaseService {
     return result.rows;
   }
 
+  async getPOIByCoordinates(lat, lng) {
+    const query = 'SELECT * FROM pois WHERE location->>\'lat\' = $1 AND location->>\'lng\' = $2';
+    const result = await pool.query(query, [lat.toString(), lng.toString()]);
+    return result.rows[0];
+  }
+
+  async updatePOI(poiId, updates) {
+    const updateFields = [];
+    const values = [];
+    let valueIndex = 1;
+    
+    if (updates.name !== undefined) {
+      updateFields.push(`name = $${valueIndex++}`);
+      values.push(updates.name);
+    }
+    if (updates.description !== undefined) {
+      updateFields.push(`description = $${valueIndex++}`);
+      values.push(updates.description);
+    }
+    if (updates.photos !== undefined) {
+      updateFields.push(`photos = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.photos));
+    }
+    if (updates.icon !== undefined) {
+      updateFields.push(`icon = $${valueIndex++}`);
+      values.push(updates.icon);
+    }
+    if (updates.reviews !== undefined) {
+      updateFields.push(`reviews = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.reviews));
+    }
+    if (updates.average_rating !== undefined) {
+      updateFields.push(`average_rating = $${valueIndex++}`);
+      values.push(updates.average_rating);
+    }
+    if (updates.review_count !== undefined) {
+      updateFields.push(`review_count = $${valueIndex++}`);
+      values.push(updates.review_count);
+    }
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid update fields provided');
+    }
+    
+    values.push(poiId); // poiId is always the last parameter
+    
+    const query = `
+      UPDATE pois 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  async deletePOI(poiId) {
+    const query = 'DELETE FROM pois WHERE id = $1 RETURNING *';
+    const result = await pool.query(query, [poiId]);
+    return result.rows[0];
+  }
+
   // Post operations
   async createPost(postData) {
     const query = `
-      INSERT INTO posts (user_id, content, photos, created_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO posts (user_id, content, photos, location, connected_poi, likes, comments, like_count, comment_count, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     
@@ -165,6 +322,12 @@ class DatabaseService {
       postData.userId,
       postData.content,
       JSON.stringify(postData.photos || []),
+      postData.location || '',
+      postData.connectedPOI || '',
+      JSON.stringify(postData.likes || []),
+      JSON.stringify(postData.comments || []),
+      postData.likes?.length || 0,
+      postData.comments?.length || 0,
       postData.createdAt
     ];
     
@@ -175,6 +338,132 @@ class DatabaseService {
   async getAllPosts() {
     const query = 'SELECT * FROM posts ORDER BY created_at DESC';
     const result = await pool.query(query);
+    return result.rows;
+  }
+
+  async getPostById(postId) {
+    const query = 'SELECT * FROM posts WHERE id = $1';
+    const result = await pool.query(query, [postId]);
+    return result.rows[0];
+  }
+
+  async updatePost(postId, updates) {
+    const updateFields = [];
+    const values = [];
+    let valueIndex = 1;
+    
+    if (updates.likes !== undefined) {
+      updateFields.push(`likes = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.likes));
+    }
+    if (updates.comments !== undefined) {
+      updateFields.push(`comments = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.comments));
+    }
+    if (updates.like_count !== undefined) {
+      updateFields.push(`like_count = $${valueIndex++}`);
+      values.push(updates.like_count);
+    }
+    if (updates.comment_count !== undefined) {
+      updateFields.push(`comment_count = $${valueIndex++}`);
+      values.push(updates.comment_count);
+    }
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid update fields provided');
+    }
+    
+    values.push(postId); // postId is always the last parameter
+    
+    const query = `
+      UPDATE posts 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  // Community operations
+  async createCommunity(communityData) {
+    const query = `
+      INSERT INTO communities (name, description, created_by, members, created_at)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `;
+    
+    const values = [
+      communityData.name,
+      communityData.description || '',
+      communityData.createdBy,
+      JSON.stringify(communityData.members || []),
+      communityData.createdAt
+    ];
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  async getAllCommunities() {
+    const query = 'SELECT * FROM communities ORDER BY created_at DESC';
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
+  async getCommunityById(communityId) {
+    const query = 'SELECT * FROM communities WHERE id = $1';
+    const result = await pool.query(query, [communityId]);
+    return result.rows[0];
+  }
+
+  async updateCommunity(communityId, updates) {
+    const updateFields = [];
+    const values = [];
+    let valueIndex = 1;
+    
+    if (updates.members !== undefined) {
+      updateFields.push(`members = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.members));
+    }
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid update fields provided');
+    }
+    
+    values.push(communityId); // communityId is always the last parameter
+    
+    const query = `
+      UPDATE communities 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  // Search operations
+  async searchUsers(query) {
+    const searchQuery = `
+      SELECT id, name, email, traveler_profile, created_at 
+      FROM users 
+      WHERE name ILIKE $1 OR email ILIKE $1 OR traveler_profile->>'nickname' ILIKE $1
+      LIMIT 20
+    `;
+    const result = await pool.query(searchQuery, [`%${query}%`]);
+    return result.rows;
+  }
+
+  async searchCommunities(query) {
+    const searchQuery = `
+      SELECT * FROM communities 
+      WHERE name ILIKE $1 OR description ILIKE $1
+      LIMIT 20
+    `;
+    const result = await pool.query(searchQuery, [`%${query}%`]);
     return result.rows;
   }
 }

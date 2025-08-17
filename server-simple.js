@@ -14,34 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 const { pool, initDatabase, testConnection } = require('./src/config/database');
 const dbService = require('./src/services/database-service');
-/*
-// Data storage file
-const DATA_FILE = path.join(__dirname, 'data.json');
-
-// In-memory storage for testing
-let users = new Map();
-let trips = new Map();
-let pois = [];
-let emailVerificationTokens = new Map(); // Store email verification tokens
-
-// Load data from file on startup
-function loadData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-      users = new Map(data.users || []);
-      trips = new Map(data.trips || []);
-      pois = data.pois || [];
-      console.log(`📂 Loaded data from file: ${users.size} users, ${trips.size} trips, ${pois.length} pois`);
-    } else {
-      console.log('📂 No existing data file found, starting with empty storage');
-    }
-  } catch (error) {
-    console.error('❌ Error loading data:', error);
-    console.log('📂 Starting with empty storage');
-  }
-}
-*/
+// Email verification tokens (temporary in-memory storage)
+let emailVerificationTokens = new Map();
 async function initializeServer() {
   try {
     console.log('🚀 Starting Tripyy Backend Server...');
@@ -70,21 +44,7 @@ async function initializeServer() {
   }
 }
 
-// Save data to file
-function saveData() {
-  try {
-    const data = {
-      users: Array.from(users.entries()),
-      trips: Array.from(trips.entries()),
-      pois,
-      timestamp: new Date().toISOString()
-    };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-    console.log(`💾 Data saved to file: ${users.size} users, ${trips.size} trips, ${pois.length} pois`);
-  } catch (error) {
-    console.error('❌ Error saving data:', error);
-  }
-}
+// Database operations are now handled by dbService
 
 // Initialize server with database
 initializeServer();
@@ -614,26 +574,35 @@ app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
 });
 
 // Communities endpoints
-app.get('/api/communities', (req, res) => {
+app.get('/api/communities', async (req, res) => {
   try {
-    // Collect all communities from all users
-    const allCommunities = [];
-    users.forEach(user => {
-      if (user.communities && Array.isArray(user.communities)) {
-        allCommunities.push(...user.communities);
-      }
-    });
-    
-    // Remove duplicates based on community ID
-    const uniqueCommunities = allCommunities.filter((community, index, self) => 
-      index === self.findIndex(c => c.id === community.id)
-    );
+    // Get all communities from database
+    const communities = await dbService.getAllCommunities();
     
     // Enrich communities with full user objects for members
-    const enrichedCommunities = uniqueCommunities.map(community => ({
-      ...community,
-      members: getFullUserObjects(community.members),
-      memberCount: Array.isArray(community.members) ? community.members.length : 0,
+    const enrichedCommunities = await Promise.all(communities.map(async (community) => {
+      const members = [];
+      if (community.members && Array.isArray(community.members)) {
+        for (const memberId of community.members) {
+          const member = await dbService.getUserById(memberId);
+          if (member) {
+            members.push({
+              id: member.id,
+              name: member.name,
+              nickname: member.traveler_profile?.nickname,
+              email: member.email,
+              photo: member.traveler_profile?.photo,
+              travelerProfile: member.traveler_profile
+            });
+          }
+        }
+      }
+      
+      return {
+        ...community,
+        members,
+        memberCount: members.length,
+      };
     }));
     
     console.log(`🏘️ Returning ${enrichedCommunities.length} communities with enriched member data`);
@@ -645,82 +614,80 @@ app.get('/api/communities', (req, res) => {
 });
 
 // Simple search endpoint for users and communities
-app.get('/api/search', authenticateUser, (req, res) => {
+app.get('/api/search', authenticateUser, async (req, res) => {
   try {
-    const q = (req.query.q || '').toString().toLowerCase().trim();
+    const q = (req.query.q || '').toString().trim();
     if (!q || q.length < 2) {
       return res.json({ users: [], communities: [] });
     }
 
-    // Search users by name, email, nickname
-    const matchedUsers = [];
-    for (const [, user] of users) {
-      const name = (user.name || '').toLowerCase();
-      const email = (user.email || '').toLowerCase();
-      const nickname = (user.travelerProfile?.nickname || '').toLowerCase();
-      if (name.includes(q) || email.includes(q) || nickname.includes(q)) {
-        matchedUsers.push({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          nickname: user.travelerProfile?.nickname || user.name,
-          travelerProfile: user.travelerProfile,
-          photo: user.travelerProfile?.photo || null,
-        });
-      }
-    }
+    // Search users and communities using database service
+    const [matchedUsers, matchedCommunities] = await Promise.all([
+      dbService.searchUsers(q),
+      dbService.searchCommunities(q)
+    ]);
 
-    // Aggregate communities and search by name/description
-    const communitiesSet = new Map();
-    users.forEach(user => {
-      if (Array.isArray(user.communities)) {
-        user.communities.forEach(c => communitiesSet.set(c.id, c));
-      }
-    });
-    const allCommunities = Array.from(communitiesSet.values());
-    const matchedCommunities = allCommunities
-      .filter(c => (c.name || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q))
-      .map(c => ({ 
-        ...c, 
-        members: getFullUserObjects(c.members || []),
-        memberCount: Array.isArray(c.members) ? c.members.length : 0,
-      }));
+    // Format user results
+    const formattedUsers = matchedUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      nickname: user.traveler_profile?.nickname || user.name,
+      travelerProfile: user.traveler_profile,
+      photo: user.traveler_profile?.photo || null,
+    }));
 
-    res.json({ users: matchedUsers, communities: matchedCommunities });
+    // Format community results
+    const formattedCommunities = matchedCommunities.map(community => ({
+      ...community,
+      memberCount: community.members ? community.members.length : 0,
+    }));
+
+    res.json({ users: formattedUsers, communities: formattedCommunities });
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Failed to search' });
   }
 });
 
-app.post('/api/communities', authenticateUser, (req, res) => {
+app.post('/api/communities', authenticateUser, async (req, res) => {
   try {
     const { name, description } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Community name is required' });
     }
 
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
     const community = {
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
       name,
       description: description || '',
-      creator: { id: user.id, email: user.email, name: user.name },
+      createdBy: user.id,
       members: [user.id],
       createdAt: new Date().toISOString(),
     };
 
-    // Store in user's communities
-    if (!user.communities) user.communities = [];
-    user.communities.push(community);
-    saveData();
+    // Store community in database
+    const savedCommunity = await dbService.createCommunity(community);
 
-    console.log('🏘️ New community created:', community);
-    res.status(201).json({ message: 'Community created', community });
+    // Update user's communities list
+    const userCommunities = user.communities || [];
+    userCommunities.push({
+      id: savedCommunity.id,
+      name: savedCommunity.name,
+      description: savedCommunity.description,
+      creator: { id: user.id, email: user.email, name: user.name },
+      members: [user.id],
+      createdAt: savedCommunity.created_at,
+    });
+
+    await dbService.updateUser(user.email, { communities: userCommunities });
+
+    console.log('🏘️ New community created:', savedCommunity);
+    res.status(201).json({ message: 'Community created', community: savedCommunity });
   } catch (error) {
     console.error('❌ Error creating community:', error);
     res.status(500).json({ error: 'Failed to create community' });
@@ -728,51 +695,50 @@ app.post('/api/communities', authenticateUser, (req, res) => {
 });
 
 // Posts endpoints
-app.get('/api/posts', (req, res) => {
+app.get('/api/posts', async (req, res) => {
   try {
-    // Collect all posts from all users
-    const allPosts = [];
-    users.forEach(user => {
-      if (user.posts && Array.isArray(user.posts)) {
-        allPosts.push(...user.posts);
-      }
-    });
+    // Get all posts from database
+    const posts = await dbService.getAllPosts();
     
-    // Enrich comments with user details if missing
-    const getUserByNickname = (nickname) => {
-      const nn = (nickname || '').toString().toLowerCase();
-      for (const [, u] of users) {
-        const uNick = (u.travelerProfile?.nickname || u.nickname || '').toLowerCase();
-        if (uNick === nn) return u;
+    // Enrich posts with user details
+    const enrichedPosts = await Promise.all(posts.map(async (post) => {
+      const user = await dbService.getUserById(post.user_id);
+      
+      // Enrich comments with user details
+      let enrichedComments = [];
+      if (post.comments && Array.isArray(post.comments)) {
+        enrichedComments = await Promise.all(post.comments.map(async (comment) => {
+          if (comment.userId) {
+            const commentUser = await dbService.getUserById(comment.userId);
+            return {
+              ...comment,
+              userName: commentUser?.name || comment.userNickname || 'Anonymous',
+              userNickname: commentUser?.traveler_profile?.nickname || comment.userNickname,
+              userPhoto: commentUser?.traveler_profile?.photo || comment.userPhoto,
+              likes: Array.isArray(comment.likes) ? comment.likes : [],
+            };
+          }
+          return comment;
+        }));
       }
-      return null;
-    };
-
-    const enrichedPosts = allPosts.map((p) => {
-      if (Array.isArray(p.comments)) {
-        p.comments = p.comments.map((c) => {
-          if (c.userId && c.userNickname && c.userPhoto) return c;
-          const u = c.userId
-            ? Array.from(users.values()).find((usr) => usr.id === c.userId)
-            : getUserByNickname(c.userNickname);
-          return {
-            ...c,
-            userId: c.userId || u?.id || c.userEmail || null,
-            userName: c.userName || u?.name || c.userNickname || 'Anonymous',
-            userNickname: c.userNickname || u?.travelerProfile?.nickname || u?.nickname || null,
-            userPhoto: c.userPhoto || u?.travelerProfile?.photo || null,
-            likes: Array.isArray(c.likes) ? c.likes : [],
-          };
-        });
-        p.commentCount = p.comments.length;
-      }
-      // Normalize likeCount
-      p.likeCount = Array.isArray(p.likes) ? p.likes.length : (p.likeCount || 0);
-      return p;
-    });
+      
+      return {
+        ...post,
+        comments: enrichedComments,
+        commentCount: enrichedComments.length,
+        likeCount: post.like_count || 0,
+        author: user ? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          nickname: user.traveler_profile?.nickname || user.name,
+          photo: user.traveler_profile?.photo || null
+        } : null
+      };
+    }));
 
     // Sort by creation date (newest first)
-    enrichedPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    enrichedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
     console.log(`📝 Returning ${enrichedPosts.length} posts`);
     res.json({ data: { posts: enrichedPosts } });
@@ -953,42 +919,54 @@ app.delete('/api/trips/:id', authenticateUser, (req, res) => {
   }
 });
 
-app.post('/api/posts', authenticateUser, (req, res) => {
+app.post('/api/posts', authenticateUser, async (req, res) => {
   try {
     const { content, location, connectedPOI } = req.body;
     if (!content) {
       return res.status(400).json({ error: 'Post content is required' });
     }
 
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
     const post = {
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      userId: user.id,
       content,
       location: location || '',
-      connectedPOI: connectedPOI || null,
-      author: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name,
-        nickname: user.travelerProfile?.nickname || user.name,
-        photo: user.travelerProfile?.photo || null
-      },
-      likes: 0,
+      connectedPOI: connectedPOI || '',
+      likes: [],
       comments: [],
       createdAt: new Date().toISOString(),
     };
 
-    // Store in user's posts
-    if (!user.posts) user.posts = [];
-    user.posts.push(post);
-    saveData();
+    // Store post in database
+    const savedPost = await dbService.createPost(post);
 
-    console.log('📝 New post created:', post);
-    res.status(201).json({ message: 'Post created', post });
+    // Update user's posts list
+    const userPosts = user.posts || [];
+    userPosts.push({
+      id: savedPost.id,
+      content: savedPost.content,
+      location: savedPost.location,
+      connectedPOI: savedPost.connected_poi,
+      author: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name,
+        nickname: user.traveler_profile?.nickname || user.name,
+        photo: user.traveler_profile?.photo || null
+      },
+      likes: 0,
+      comments: [],
+      createdAt: savedPost.created_at,
+    });
+
+    await dbService.updateUser(user.email, { posts: userPosts });
+
+    console.log('📝 New post created:', savedPost);
+    res.status(201).json({ message: 'Post created', post: savedPost });
   } catch (error) {
     console.error('❌ Error creating post:', error);
     res.status(500).json({ error: 'Failed to create post' });
