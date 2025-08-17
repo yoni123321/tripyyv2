@@ -778,10 +778,10 @@ app.post('/api/upload', authenticateUser, upload.single('file'), async (req, res
   }
 });
 
-// Trips endpoints (in-memory)
-app.post('/api/trips', authenticateUser, (req, res) => {
+// Trips endpoints
+app.post('/api/trips', authenticateUser, async (req, res) => {
   try {
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -801,56 +801,55 @@ app.post('/api/trips', authenticateUser, (req, res) => {
     } = req.body || {};
 
     const trip = {
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
       userId: user.id,
       name,
       destination,
-      dates,
+      start_date: dates?.start,
+      end_date: dates?.end,
       itinerary,
       preferences,
-      travelerProfile,
+      traveler_profile: travelerProfile,
       budget,
       tips,
       suggestions,
-      isPublic,
-      shareType,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      is_public: isPublic,
+      share_type: shareType,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    // Store in user's profile
-    if (!user.trips) user.trips = [];
-    user.trips.push({
-      id: trip.id,
-      name: trip.name,
-      destination: trip.destination,
-      dates: trip.dates,
-      itinerary: trip.itinerary,
-      budget: trip.budget,
-      tips: trip.tips,
+    // Store trip in database
+    const savedTrip = await dbService.createTrip(trip);
+
+    // Update user's trips list
+    const userTrips = user.trips || [];
+    userTrips.push({
+      id: savedTrip.id,
+      name: savedTrip.name,
+      destination: savedTrip.destination,
+      dates: { start: savedTrip.start_date, end: savedTrip.end_date },
+      itinerary: savedTrip.itinerary,
+      budget: savedTrip.budget,
+      tips: savedTrip.tips,
       summary: req.body.summary,
-      createdAt: trip.createdAt,
-      updatedAt: trip.updatedAt,
-      isPublic: trip.isPublic,
-      shareType: trip.shareType,
+      createdAt: savedTrip.created_at,
+      updatedAt: savedTrip.updated_at,
+      isPublic: savedTrip.is_public,
+      shareType: savedTrip.share_type,
     });
 
-    // Store in global trips map for stats
-    trips.set(trip.id, trip);
-    saveData();
+    await dbService.updateUser(user.email, { trips: userTrips });
 
-    res.json(trip);
+    res.json(savedTrip);
   } catch (error) {
     console.error('Create trip error:', error);
     res.status(500).json({ error: 'Failed to create trip' });
   }
 });
 
-app.get('/api/trips', authenticateUser, (req, res) => {
+app.get('/api/trips', authenticateUser, async (req, res) => {
   try {
-    const userTrips = Array.from(trips.values())
-      .filter(t => t.userId === req.userId)
-      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const userTrips = await dbService.getUserTrips(req.userId);
     res.json(userTrips);
   } catch (error) {
     console.error('Get trips error:', error);
@@ -858,22 +857,38 @@ app.get('/api/trips', authenticateUser, (req, res) => {
   }
 });
 
-app.put('/api/trips/:id', authenticateUser, (req, res) => {
+app.put('/api/trips/:id', authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
-    const trip = trips.get(id);
-    if (!trip || trip.userId !== req.userId) {
+    const trip = await dbService.getTripById(id);
+    if (!trip || trip.user_id !== req.userId) {
       return res.status(404).json({ error: 'Trip not found' });
     }
 
     const updates = { ...req.body };
-    // Keep updatedAt fresh
-    updates.updatedAt = new Date().toISOString();
-    const updated = { ...trip, ...updates };
-    trips.set(id, updated);
+    // Convert camelCase to snake_case for database
+    if (updates.dates) {
+      updates.start_date = updates.dates.start;
+      updates.end_date = updates.dates.end;
+      delete updates.dates;
+    }
+    if (updates.travelerProfile) {
+      updates.traveler_profile = updates.travelerProfile;
+      delete updates.travelerProfile;
+    }
+    if (updates.isPublic !== undefined) {
+      updates.is_public = updates.isPublic;
+      delete updates.isPublic;
+    }
+    if (updates.shareType) {
+      updates.share_type = updates.shareType;
+      delete updates.shareType;
+    }
+
+    const updated = await dbService.updateTrip(id, updates);
 
     // Also update on user object if present
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (user && Array.isArray(user.trips)) {
       const idx = user.trips.findIndex(t => t.id === id);
       if (idx !== -1) {
@@ -881,17 +896,18 @@ app.put('/api/trips/:id', authenticateUser, (req, res) => {
           ...user.trips[idx],
           name: updated.name,
           destination: updated.destination,
-          dates: updated.dates,
+          dates: { start: updated.start_date, end: updated.end_date },
           itinerary: updated.itinerary,
           budget: updated.budget,
           tips: updated.tips,
-          updatedAt: updated.updatedAt,
-          isPublic: updated.isPublic,
-          shareType: updated.shareType,
+          updatedAt: updated.updated_at,
+          isPublic: updated.is_public,
+          shareType: updated.share_type,
         };
+        await dbService.updateUser(user.email, { trips: user.trips });
       }
     }
-    saveData();
+    
     res.json(updated);
   } catch (error) {
     console.error('Update trip error:', error);
@@ -899,19 +915,22 @@ app.put('/api/trips/:id', authenticateUser, (req, res) => {
   }
 });
 
-app.delete('/api/trips/:id', authenticateUser, (req, res) => {
+app.delete('/api/trips/:id', authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
-    const trip = trips.get(id);
-    if (!trip || trip.userId !== req.userId) {
+    const trip = await dbService.getTripById(id);
+    if (!trip || trip.user_id !== req.userId) {
       return res.status(404).json({ error: 'Trip not found' });
     }
-    trips.delete(id);
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    
+    await dbService.deleteTrip(id);
+    
+    const user = await dbService.getUserById(req.userId);
     if (user && Array.isArray(user.trips)) {
       user.trips = user.trips.filter(t => t.id !== id);
+      await dbService.updateUser(user.email, { trips: user.trips });
     }
-    saveData();
+    
     res.json({ success: true });
   } catch (error) {
     console.error('Delete trip error:', error);
@@ -974,38 +993,46 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
 });
 
 // Tripyy POI endpoints
-app.get('/api/pois', (req, res) => {
-  res.json({ pois });
+app.get('/api/pois', async (req, res) => {
+  try {
+    const pois = await dbService.getAllPOIs();
+    res.json({ pois });
+  } catch (error) {
+    console.error('Get POIs error:', error);
+    res.status(500).json({ error: 'Failed to get POIs' });
+  }
 });
 
-app.post('/api/pois', authenticateUser, (req, res) => {
+app.post('/api/pois', authenticateUser, async (req, res) => {
   try {
     const { name, coordinates, review, icon, description, photo, type, author } = req.body;
     if (!name || !coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lng !== 'number') {
       return res.status(400).json({ error: 'Name and valid coordinates are required' });
     }
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-  const poi = {
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
+
+    const poi = {
       name,
       coordinates,
       user: { id: user.id, email: user.email, name: user.name },
       createdAt: new Date().toISOString(),
       review: review || '',
       icon: icon || '',
-    description: description || '',
-    // Store full Cloudinary URL if provided
-    photo: photo || '',
+      description: description || '',
+      photo: photo || '',
       type: type || 'public',
-      author: author || user.travelerProfile?.nickname || user.name || '',
+      author: author || user.traveler_profile?.nickname || user.name || '',
     };
-    pois.push(poi);
-    saveData();
-    console.log('📍 New POI added:', poi);
-    res.status(201).json({ message: 'POI added', poi });
+
+    // Store POI in database
+    const savedPoi = await dbService.createPOI(poi);
+    
+    console.log('📍 New POI added:', savedPoi);
+    res.status(201).json({ message: 'POI added', poi: savedPoi });
   } catch (error) {
     console.error('❌ Error adding POI:', error);
     res.status(500).json({ error: 'Failed to add POI' });
@@ -1013,35 +1040,36 @@ app.post('/api/pois', authenticateUser, (req, res) => {
 });
 
 // Update an existing public POI (by coordinates)
-app.put('/api/pois', authenticateUser, (req, res) => {
+app.put('/api/pois', authenticateUser, async (req, res) => {
   try {
     const { coordinates, name, icon, description, photo } = req.body;
     if (!coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lng !== 'number') {
       return res.status(400).json({ error: 'Valid coordinates are required' });
     }
 
-    const idx = pois.findIndex(p => p.coordinates.lat === coordinates.lat && p.coordinates.lng === coordinates.lng);
-    if (idx === -1) {
+    // Find POI by coordinates using database service
+    const poi = await dbService.getPOIByCoordinates(coordinates.lat, coordinates.lng);
+    if (!poi) {
       return res.status(404).json({ error: 'POI not found' });
     }
 
-    const poi = pois[idx];
     // Authorization: only the creator can edit (by user id or author nickname)
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    const isOwner = (poi.user?.id && poi.user.id === user.id) || (poi.author && (poi.author === (user.travelerProfile?.nickname || user.name)));
+    const isOwner = (poi.user_id && poi.user_id === user.id) || (poi.author && (poi.author === (user.traveler_profile?.nickname || user.name)));
     if (!isOwner) {
       return res.status(403).json({ error: 'Not authorized to edit this POI' });
     }
 
-    if (typeof name === 'string') poi.name = name;
-    if (typeof icon === 'string') poi.icon = icon;
-    if (typeof description === 'string') poi.description = description;
+    const updates = {};
+    if (typeof name === 'string') updates.name = name;
+    if (typeof icon === 'string') updates.icon = icon;
+    if (typeof description === 'string') updates.description = description;
     if (typeof photo === 'string') {
       // If photo is being replaced and old photo is a Cloudinary asset, attempt to delete the old one
       try {
-        if (poi.photo && typeof poi.photo === 'string' && poi.photo.startsWith('https://res.cloudinary.com/')) {
-          const oldPublicId = extractCloudinaryPublicId(poi.photo);
+        if (poi.photos && Array.isArray(poi.photos) && poi.photos[0] && typeof poi.photos[0] === 'string' && poi.photos[0].startsWith('https://res.cloudinary.com/')) {
+          const oldPublicId = extractCloudinaryPublicId(poi.photos[0]);
           if (oldPublicId) {
             cloudinary.uploader.destroy(oldPublicId, (err, result) => {
               if (err) {
@@ -1055,11 +1083,11 @@ app.put('/api/pois', authenticateUser, (req, res) => {
       } catch (cleanupErr) {
         console.warn('⚠️ Error attempting to delete old Cloudinary image:', cleanupErr);
       }
-      poi.photo = photo; // allow full URL or filename
+      updates.photos = [photo]; // Store as array in database
     }
 
-    saveData();
-    return res.json({ message: 'POI updated', poi });
+    const updatedPoi = await dbService.updatePOI(poi.id, updates);
+    return res.json({ message: 'POI updated', poi: updatedPoi });
   } catch (error) {
     console.error('❌ Error updating POI:', error);
     return res.status(500).json({ error: 'Failed to update POI' });
