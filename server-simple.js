@@ -1647,24 +1647,26 @@ app.post('/api/communities/:communityId/leave', authenticateUser, (req, res) => 
   }
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  const os = require('os');
-  const nets = os.networkInterfaces();
-  let hostIp = 'localhost';
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name] || []) {
-      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
-        hostIp = net.address;
-        break;
+// Start server function
+function startServer() {
+  app.listen(PORT, '0.0.0.0', () => {
+    const os = require('os');
+    const nets = os.networkInterfaces();
+    let hostIp = 'localhost';
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] || []) {
+        if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+          hostIp = net.address;
+          break;
+        }
       }
+      if (hostIp !== 'localhost') break;
     }
-    if (hostIp !== 'localhost') break;
-  }
-  console.log(`🚀 Backend server running on port ${PORT}`);
-  console.log(`🌐 Network accessible at: http://${hostIp}:${PORT}`);
-  console.log(`📡 GitHub AI: ${process.env.GITHUB_AI ? '✅' : '❌'}`);
-  console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
-      console.log(`🗄️ Database: ✅ PostgreSQL (Production Ready)`);
-  console.log(`🔗 CORS enabled for cross-origin requests`);
-}); 
+    console.log(`🚀 Backend server running on port ${PORT}`);
+    console.log(`🌐 Network accessible at: http://${hostIp}:${PORT}`);
+    console.log(`📡 GitHub AI: ${process.env.GITHUB_AI ? '✅' : '❌'}`);
+    console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
+    console.log(`🗄️ Database: ✅ PostgreSQL (Production Ready)`);
+    console.log(`🔗 CORS enabled for cross-origin requests`);
+  });
+} 
