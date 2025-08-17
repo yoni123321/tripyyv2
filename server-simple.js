@@ -1505,17 +1505,19 @@ app.post('/api/communities/:communityId/join', authenticateUser, async (req, res
 });
 
 // User profile endpoint
-app.get('/api/user/profile/:userId', authenticateUser, (req, res) => {
+app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
     
     // Try by ID first
-    let user = Array.from(users.values()).find(u => u.id === userId);
+    let user = await dbService.getUserById(userId);
     
     // If not found, try by nickname (strip leading @ if provided)
     if (!user) {
       const nickname = (userId || '').toString().replace(/^@/, '');
-      user = Array.from(users.values()).find(u => (u.travelerProfile?.nickname || u.nickname || '').toLowerCase() === nickname.toLowerCase());
+      // Search for user by nickname in database
+      const allUsers = await dbService.searchUsers(nickname);
+      user = allUsers.find(u => (u.traveler_profile?.nickname || '').toLowerCase() === nickname.toLowerCase());
     }
     
     if (!user) {
@@ -1526,11 +1528,11 @@ app.get('/api/user/profile/:userId', authenticateUser, (req, res) => {
     const profileData = {
       id: user.id,
       name: user.name,
-      nickname: user.nickname,
+      nickname: user.traveler_profile?.nickname,
       email: user.email,
-      photo: user.photo,
-      travelerProfile: user.travelerProfile,
-      createdAt: user.createdAt
+      photo: user.traveler_profile?.photo,
+      travelerProfile: user.traveler_profile,
+      createdAt: user.created_at
     };
     
     res.json({ data: profileData });
@@ -1541,19 +1543,19 @@ app.get('/api/user/profile/:userId', authenticateUser, (req, res) => {
 });
 
 // User trips endpoint
-app.get('/api/user/trips/:userId', authenticateUser, (req, res) => {
+app.get('/api/user/trips/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
     
     // Find user by ID
-    const user = Array.from(users.values()).find(u => u.id === userId);
+    const user = await dbService.getUserById(userId);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    // Get user's trips (shared trips) - handle case where trips don't exist
-    const userTrips = user.trips || [];
+    // Get user's trips from database
+    const userTrips = await dbService.getUserTrips(userId);
     
     console.log(`📋 Getting trips for user ${userId}:`, userTrips.length, 'trips');
     
@@ -1565,47 +1567,38 @@ app.get('/api/user/trips/:userId', authenticateUser, (req, res) => {
 });
 
 // Community leave endpoint
-app.post('/api/communities/:communityId/leave', authenticateUser, (req, res) => {
+app.post('/api/communities/:communityId/leave', authenticateUser, async (req, res) => {
   try {
     const { communityId } = req.params;
-    const user = Array.from(users.values()).find(u => u.id === req.userId);
+    const user = await dbService.getUserById(req.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Find the community
-    let foundCommunity = null;
-    let foundUser = null;
-    
-    for (const [email, userData] of users) {
-      if (userData.communities) {
-        const community = userData.communities.find(c => c.id === communityId);
-        if (community) {
-          foundCommunity = community;
-          foundUser = userData;
-          break;
-        }
-      }
-    }
-
+    // Find the community in database
+    const foundCommunity = await dbService.getCommunityById(communityId);
     if (!foundCommunity) {
       return res.status(404).json({ error: 'Community not found' });
     }
 
     // Remove user from community members
-    const memberIndex = foundCommunity.members.indexOf(user.id);
+    const currentMembers = foundCommunity.members || [];
+    const memberIndex = currentMembers.indexOf(user.id);
     if (memberIndex !== -1) {
-      foundCommunity.members.splice(memberIndex, 1);
+      currentMembers.splice(memberIndex, 1);
     }
     
-    saveData();
+    // Update community in database
+    const updatedCommunity = await dbService.updateCommunity(communityId, {
+      members: currentMembers
+    });
     
     console.log(`👥 User ${user.id} left community ${communityId}`);
     
     // Return enriched community data with full user objects
     const enrichedCommunity = {
-      ...foundCommunity,
-      members: getFullUserObjects(foundCommunity.members)
+      ...updatedCommunity,
+      members: await getFullUserObjects(currentMembers)
     };
     
     res.json({ 
