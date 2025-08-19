@@ -4,9 +4,9 @@ class DatabaseService {
   // User operations
   async createUser(userData) {
     const query = `
-      INSERT INTO users (email, password, name, created_at, last_login, email_verified, email_verified_at, preferences, traveler_profile, llm_config, saved_agents)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
+      INSERT INTO users (email, password, name, created_at, last_login, email_verified, email_verified_at, preferences, traveler_profile, llm_config, saved_agents, friends, communities, posts, trips, likes, last_known_location)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      RETURNING id
     `;
     
     const values = [
@@ -20,11 +20,17 @@ class DatabaseService {
       JSON.stringify(userData.preferences || {}),
       JSON.stringify(userData.travelerProfile || {}),
       JSON.stringify(userData.llmConfig || {}),
-      JSON.stringify(userData.savedAgents || [])
+      JSON.stringify(userData.savedAgents || []),
+      JSON.stringify(userData.friends || []),
+      JSON.stringify(userData.communities || []),
+      JSON.stringify(userData.posts || []),
+      JSON.stringify(userData.trips || []),
+      userData.likes || 0,
+      userData.lastKnownLocation ? JSON.stringify(userData.lastKnownLocation) : null
     ];
     
     const result = await pool.query(query, values);
-    return result.rows[0];
+    return result.rows[0].id;
   }
 
   async getUserByEmail(email) {
@@ -37,6 +43,12 @@ class DatabaseService {
     const query = 'SELECT * FROM users WHERE id = $1';
     const result = await pool.query(query, [userId]);
     return result.rows[0];
+  }
+
+  async getUserCount() {
+    const query = 'SELECT COUNT(*) FROM users';
+    const result = await pool.query(query);
+    return parseInt(result.rows[0].count);
   }
 
   async updateUser(email, updates) {
@@ -96,15 +108,15 @@ class DatabaseService {
     const query = `
       INSERT INTO trips (user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, is_public, share_type, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *
+      RETURNING id
     `;
     
     const values = [
       tripData.userId,
       tripData.name,
       tripData.destination,
-      tripData.dates?.start,
-      tripData.dates?.end,
+      tripData.startDate,
+      tripData.endDate,
       JSON.stringify(tripData.itinerary || {}),
       JSON.stringify(tripData.preferences || {}),
       JSON.stringify(tripData.travelerProfile || {}),
@@ -118,7 +130,7 @@ class DatabaseService {
     ];
     
     const result = await pool.query(query, values);
-    return result.rows[0];
+    return result.rows[0].id;
   }
 
   async getUserTrips(userId) {
@@ -219,18 +231,18 @@ class DatabaseService {
     const query = `
       INSERT INTO pois (name, description, location, photos, icon, type, author, user_id, reviews, average_rating, review_count, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *
+      RETURNING id
     `;
     
     const values = [
       poiData.name,
       poiData.description || '',
-      JSON.stringify(poiData.coordinates),
-      JSON.stringify([poiData.photo]),
+      JSON.stringify(poiData.location || {}),
+      JSON.stringify(poiData.photos || []),
       poiData.icon || '',
       poiData.type || 'public',
       poiData.author || '',
-      poiData.user?.id,
+      poiData.userId,
       JSON.stringify(poiData.reviews || []),
       poiData.averageRating || 0,
       poiData.reviewCount || 0,
@@ -238,7 +250,7 @@ class DatabaseService {
     ];
     
     const result = await pool.query(query, values);
-    return result.rows[0];
+    return result.rows[0].id;
   }
 
   async getAllPOIs() {

@@ -159,6 +159,165 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Migration endpoint - triggers data migration from data.json
+app.post('/api/migrate', async (req, res) => {
+  try {
+    console.log('🚀 Migration endpoint triggered...');
+    
+    // Check if data already exists
+    const userCount = await dbService.getUserCount();
+    if (userCount > 0) {
+      return res.json({
+        status: 'skipped',
+        message: 'Database already has data, migration skipped',
+        userCount
+      });
+    }
+    
+    // Read and parse data.json
+    const fs = require('fs');
+    const path = require('path');
+    const dataPath = path.join(__dirname, 'data', 'data.json');
+    
+    if (!fs.existsSync(dataPath)) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'data.json not found'
+      });
+    }
+    
+    const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+    console.log(`📂 Found data: ${data.users?.length || 0} users, ${data.trips?.length || 0} trips, ${data.pois?.length || 0} POIs`);
+    
+    let migratedCount = 0;
+    
+    // Migrate users
+    if (data.users && data.users.length > 0) {
+      console.log('👤 Migrating users...');
+      for (const [email, userData] of data.users) {
+        try {
+          const userId = await dbService.createUser({
+            email: userData.email,
+            password: userData.password,
+            name: userData.name,
+            createdAt: new Date(userData.createdAt),
+            lastLogin: new Date(userData.lastLogin),
+            emailVerified: userData.emailVerified,
+            emailVerifiedAt: userData.emailVerifiedAt ? new Date(userData.emailVerifiedAt) : null,
+            preferences: userData.preferences || {},
+            travelerProfile: userData.travelerProfile || {},
+            llmConfig: userData.llmConfig || {},
+            savedAgents: userData.savedAgents || [],
+            friends: userData.friends || [],
+            communities: userData.communities || [],
+            posts: userData.posts || [],
+            trips: userData.trips || [],
+            likes: userData.likes || 0,
+            lastKnownLocation: userData.lastKnownLocation || null
+          });
+          
+          console.log(`✅ User migrated: ${userData.email} (ID: ${userId})`);
+          userData._newId = userId;
+          migratedCount++;
+        } catch (error) {
+          console.error(`❌ Failed to migrate user ${email}:`, error.message);
+        }
+      }
+    }
+    
+    // Migrate trips
+    if (data.trips && data.trips.length > 0) {
+      console.log('✈️ Migrating trips...');
+      for (const [tripId, tripData] of data.trips) {
+        try {
+          const user = await dbService.getUserByEmail(tripData.user?.email || 'dev@tripyy.com');
+          if (!user) {
+            console.log(`⚠️ Skipping trip ${tripId} - user not found`);
+            continue;
+          }
+          
+          const tripId = await dbService.createTrip({
+            userId: user.id,
+            name: tripData.name,
+            destination: tripData.destination || '',
+            startDate: tripData.dates?.start ? new Date(tripData.dates.start) : null,
+            endDate: tripData.dates?.end ? new Date(tripData.dates.end) : null,
+            itinerary: tripData.itinerary || {},
+            preferences: tripData.preferences || {},
+            travelerProfile: tripData.travelerProfile || {},
+            budget: tripData.budget || {},
+            tips: tripData.tips || [],
+            suggestions: tripData.suggestions || [],
+            isPublic: tripData.isPublic || false,
+            shareType: tripData.shareType || 'private',
+            createdAt: new Date(tripData.createdAt),
+            updatedAt: new Date(tripData.updatedAt)
+          });
+          
+          console.log(`✅ Trip migrated: ${tripData.name} (ID: ${tripId})`);
+          migratedCount++;
+        } catch (error) {
+          console.error(`❌ Failed to migrate trip ${tripId}:`, error.message);
+        }
+      }
+    }
+    
+    // Migrate POIs
+    if (data.pois && data.pois.length > 0) {
+      console.log('📍 Migrating POIs...');
+      for (const poiData of data.pois) {
+        try {
+          const user = await dbService.getUserByEmail(poiData.user?.email || 'dev@tripyy.com');
+          if (!user) {
+            console.log(`⚠️ Skipping POI ${poiData.name} - user not found`);
+            continue;
+          }
+          
+          const poiId = await dbService.createPOI({
+            name: poiData.name,
+            description: poiData.description || '',
+            location: poiData.coordinates || {},
+            photos: [poiData.photo || ''],
+            icon: poiData.icon || '',
+            type: poiData.type || 'public',
+            author: poiData.author || poiData.user?.name || '',
+            userId: user.id,
+            reviews: poiData.reviews || [],
+            averageRating: poiData.averageRating || 0,
+            reviewCount: poiData.reviewCount || 0,
+            createdAt: new Date(poiData.createdAt)
+          });
+          
+          console.log(`✅ POI migrated: ${poiData.name} (ID: ${poiId})`);
+          migratedCount++;
+        } catch (error) {
+          console.error(`❌ Failed to migrate POI ${poiData.name}:`, error.message);
+        }
+      }
+    }
+    
+    console.log('🎉 Migration completed successfully!');
+    res.json({
+      status: 'success',
+      message: 'Migration completed successfully',
+      migratedCount,
+      summary: {
+        users: data.users?.length || 0,
+        trips: data.trips?.length || 0,
+        pois: data.pois?.length || 0
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Migration failed',
+      error: error.message
+    });
+  }
+});
+
 // Authentication endpoints - TEMPORARILY DISABLED FOR MIGRATION
 app.post('/api/auth/register', async (req, res) => {
   res.status(503).json({ error: 'Registration temporarily disabled during database migration' });
