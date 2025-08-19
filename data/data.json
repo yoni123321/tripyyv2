@@ -1,0 +1,510 @@
+{
+  "users": [
+    [
+      "dev@tripyy.com",
+      {
+        "id": "dev-user-12345",
+        "email": "dev@tripyy.com",
+        "password": "$2a$10$J7Qu8K382L2HUXyKYXMxwuBvDABFFX3vVSbkW4xzCJEay5b/BHWRu",
+        "name": "Developer User",
+        "createdAt": "2025-08-01T14:48:53.144Z",
+        "lastLogin": "2025-08-08T16:17:10.260Z",
+        "emailVerified": true,
+        "emailVerifiedAt": "2025-08-01T14:48:53.144Z",
+        "preferences": {
+          "defaultCurrency": "USD",
+          "language": "en"
+        },
+        "travelerProfile": {
+          "name": "Developer User",
+          "nickname": "devuser",
+          "birthday": "1990-01-01T00:00:00.000Z",
+          "photo": {
+            "uri": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754746010/tripyy/xekmybaheywv1aqjfmkc.jpg",
+            "width": 4032,
+            "height": 3024
+          },
+          "age": 33,
+          "interests": [
+            "Travel",
+            "Technology",
+            "Food"
+          ],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 1
+        },
+        "lastKnownLocation": {
+          "latitude": 37.785834,
+          "longitude": -122.406417,
+          "timestamp": "2025-08-02T08:01:49.555Z"
+        },
+        "llmConfig": {
+          "agent": "openai",
+          "apiKey": "",
+          "model": "gpt-3.5-turbo",
+          "endpoint": ""
+        },
+        "savedAgents": [],
+        "friends": [
+          "friend-1",
+          "friend-2"
+        ],
+        "likes": 15,
+        "posts": [],
+        "communities": [
+          {
+            "id": "community-1",
+            "name": "Adventure Travelers",
+            "description": "For those who love extreme sports and adventure travel",
+            "creator": {
+              "id": "dev-user-12345",
+              "name": "Developer User"
+            },
+            "members": [
+              "1754325120298",
+              "dev-user-12345"
+            ],
+            "createdAt": "2025-08-01T12:00:00.000Z"
+          },
+          {
+            "id": "community-2",
+            "name": "Food Lovers",
+            "description": "Share your culinary adventures around the world",
+            "creator": {
+              "id": "dev-user-12345",
+              "name": "Developer User"
+            },
+            "members": [
+              "dev-user-12345"
+            ],
+            "createdAt": "2025-08-01T10:00:00.000Z"
+          }
+        ],
+        "trips": [
+          {
+            "id": "1754738978144mvzye3odc88",
+            "name": "13",
+            "destination": "",
+            "dates": {},
+            "itinerary": {
+              "days": []
+            },
+            "budget": {
+              "total": 0,
+              "spent": 0,
+              "currency": "USD"
+            },
+            "tips": [],
+            "createdAt": "2025-08-09T11:29:38.144Z",
+            "updatedAt": "2025-08-09T11:29:38.144Z",
+            "isPublic": true,
+            "shareType": "public"
+          }
+        ]
+      }
+    ],
+    [
+      "friend-1",
+      {
+        "id": "friend-1",
+        "email": "sarah@example.com",
+        "name": "Sarah Johnson",
+        "lastKnownLocation": {
+          "latitude": 31.2497,
+          "longitude": 35.2332,
+          "timestamp": "2025-08-01T14:18:53.150Z"
+        },
+        "travelerProfile": {
+          "name": "Sarah",
+          "nickname": "Sarah🌍",
+          "birthday": "1992-05-15T00:00:00.000Z",
+          "photo": {
+            "uri": "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face"
+          },
+          "age": 31,
+          "interests": [
+            "Hiking",
+            "Photography",
+            "Local Cuisine"
+          ],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 2
+        },
+        "trips": [
+          {
+            "id": "trip_sarah_1",
+            "name": "European Adventure",
+            "destination": "Europe",
+            "dates": {
+              "start": "2025-06-15T00:00:00.000Z",
+              "end": "2025-06-30T00:00:00.000Z"
+            },
+            "summary": "Backpacking through Europe",
+            "createdAt": "2025-06-01T00:00:00.000Z",
+            "updatedAt": "2025-06-01T00:00:00.000Z"
+          },
+          {
+            "id": "trip_sarah_2",
+            "name": "Japan Cherry Blossom",
+            "destination": "Japan",
+            "dates": {
+              "start": "2025-04-01T00:00:00.000Z",
+              "end": "2025-04-15T00:00:00.000Z"
+            },
+            "summary": "Cherry blossom season in Tokyo and Kyoto",
+            "createdAt": "2025-03-15T00:00:00.000Z",
+            "updatedAt": "2025-03-15T00:00:00.000Z"
+          }
+        ]
+      }
+    ],
+    [
+      "friend-2",
+      {
+        "id": "friend-2",
+        "email": "mike@example.com",
+        "name": "Mike Chen",
+        "lastKnownLocation": {
+          "latitude": 31.2572,
+          "longitude": 35.229,
+          "timestamp": "2025-08-01T12:48:53.150Z"
+        },
+        "travelerProfile": {
+          "name": "Mike",
+          "nickname": "Mike🏔️",
+          "birthday": "1988-12-03T00:00:00.000Z",
+          "photo": {
+            "uri": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face"
+          },
+          "age": 35,
+          "interests": [
+            "Mountain Climbing",
+            "Adventure Sports",
+            "Beer"
+          ],
+          "dietaryRestrictions": [
+            "Gluten-Free"
+          ],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 1
+        },
+        "trips": [
+          {
+            "id": "trip_mike_1",
+            "name": "Mountain Climbing Expedition",
+            "destination": "Nepal",
+            "dates": {
+              "start": "2025-05-01T00:00:00.000Z",
+              "end": "2025-05-15T00:00:00.000Z"
+            },
+            "summary": "Climbing Mount Everest base camp",
+            "createdAt": "2025-04-15T00:00:00.000Z",
+            "updatedAt": "2025-04-15T00:00:00.000Z"
+          },
+          {
+            "id": "trip_mike_2",
+            "name": "Patagonia Trek",
+            "destination": "Argentina",
+            "dates": {
+              "start": "2025-02-01T00:00:00.000Z",
+              "end": "2025-02-20T00:00:00.000Z"
+            },
+            "summary": "Hiking in Torres del Paine National Park",
+            "createdAt": "2025-01-15T00:00:00.000Z",
+            "updatedAt": "2025-01-15T00:00:00.000Z"
+          }
+        ]
+      }
+    ],
+    [
+      "friend-3",
+      {
+        "id": "friend-3",
+        "email": "emma@example.com",
+        "name": "Emma Wilson",
+        "lastKnownLocation": {
+          "latitude": -1.2921,
+          "longitude": 35.1969,
+          "timestamp": "2025-08-01T09:48:53.150Z"
+        },
+        "travelerProfile": {
+          "name": "Emma",
+          "nickname": "Emma🦁",
+          "birthday": "1995-08-22T00:00:00.000Z",
+          "photo": {
+            "uri": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face"
+          },
+          "age": 28,
+          "interests": [
+            "Wildlife Photography",
+            "Safari",
+            "Conservation"
+          ],
+          "dietaryRestrictions": [
+            "Vegan"
+          ],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 3
+        }
+      }
+    ],
+    [
+      "123123@gmail.com",
+      {
+        "id": "1754143356182",
+        "email": "123123@gmail.com",
+        "password": "$2a$10$94kaWYkbCyRkl68EytETp.gfN5wgse9MuxtlSXV4/5qQkuNBwcsdm",
+        "name": "123",
+        "createdAt": "2025-08-02T14:02:36.182Z",
+        "lastLogin": "2025-08-02T14:02:36.182Z",
+        "preferences": {
+          "defaultCurrency": "USD",
+          "language": "en"
+        },
+        "travelerProfile": {
+          "name": "",
+          "nickname": "",
+          "birthday": null,
+          "photo": null,
+          "age": 0,
+          "interests": [],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 0
+        },
+        "llmConfig": {
+          "agent": "openai",
+          "apiKey": "",
+          "model": "gpt-3.5-turbo",
+          "endpoint": ""
+        },
+        "savedAgents": []
+      }
+    ],
+    [
+      "123123123@gmail.com",
+      {
+        "id": "1754143368541",
+        "email": "123123123@gmail.com",
+        "password": "$2a$10$qeC1zOc7VqvIVYziLirQW.w85P2hcwjMYD7qovffgXVCWhFPicICG",
+        "name": "123",
+        "createdAt": "2025-08-02T14:02:48.541Z",
+        "lastLogin": "2025-08-02T14:02:48.541Z",
+        "preferences": {
+          "defaultCurrency": "USD",
+          "language": "en"
+        },
+        "travelerProfile": {
+          "name": "",
+          "nickname": "",
+          "birthday": null,
+          "photo": null,
+          "age": 0,
+          "interests": [],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 0
+        },
+        "llmConfig": {
+          "agent": "openai",
+          "apiKey": "",
+          "model": "gpt-3.5-turbo",
+          "endpoint": ""
+        },
+        "savedAgents": []
+      }
+    ],
+    [
+      "89089796@gmail.com",
+      {
+        "id": "1754143402638",
+        "email": "89089796@gmail.com",
+        "password": "$2a$10$lMQiZv5qIDkNiy9tV0T9iOKzR8cKev2K2nsZUb7qm3OtXyTR05G4O",
+        "name": "123456",
+        "createdAt": "2025-08-02T14:03:22.638Z",
+        "lastLogin": "2025-08-02T14:03:22.638Z",
+        "preferences": {
+          "defaultCurrency": "USD",
+          "language": "en"
+        },
+        "travelerProfile": {
+          "name": "",
+          "nickname": "",
+          "birthday": null,
+          "photo": null,
+          "age": 0,
+          "interests": [],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 0
+        },
+        "llmConfig": {
+          "agent": "openai",
+          "apiKey": "",
+          "model": "gpt-3.5-turbo",
+          "endpoint": ""
+        },
+        "savedAgents": []
+      }
+    ],
+    [
+      "Yonizalcman24@gmail.com",
+      {
+        "id": "1754325120298",
+        "email": "Yonizalcman24@gmail.com",
+        "password": "$2a$10$FJcGeaR/ImUMInwNSEZOT.4QvOVSmsUmExTa4rNL4GlVSBFB.ynYa",
+        "name": "Yosi",
+        "createdAt": "2025-08-04T16:32:00.298Z",
+        "lastLogin": "2025-08-04T16:32:00.298Z",
+        "emailVerified": false,
+        "emailVerifiedAt": null,
+        "preferences": {
+          "defaultCurrency": "USD",
+          "language": "en"
+        },
+        "travelerProfile": {
+          "name": "Yosi",
+          "nickname": "Yosi",
+          "birthday": "1995-06-15T00:00:00.000Z",
+          "photo": null,
+          "age": 28,
+          "interests": [
+            "Travel",
+            "Adventure",
+            "Photography",
+            "Food"
+          ],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 1
+        },
+        "llmConfig": {
+          "agent": "openai",
+          "apiKey": "",
+          "model": "gpt-3.5-turbo",
+          "endpoint": ""
+        },
+        "savedAgents": [],
+        "friends": [
+          "friend-1",
+          "friend-2"
+        ],
+        "likes": 12,
+        "posts": []
+      }
+    ]
+  ],
+  "trips": [
+    [
+      "1754738978144mvzye3odc88",
+      {
+        "id": "1754738978144mvzye3odc88",
+        "userId": "dev-user-12345",
+        "name": "13",
+        "destination": "",
+        "dates": {},
+        "itinerary": {
+          "days": []
+        },
+        "preferences": {
+          "budget": "",
+          "currency": "USD",
+          "activities": [],
+          "accommodation": "",
+          "transportation": "",
+          "food": "",
+          "pace": "",
+          "numberOfTravelers": 0
+        },
+        "travelerProfile": {
+          "name": "",
+          "age": 0,
+          "interests": [],
+          "dietaryRestrictions": [],
+          "accessibilityNeeds": [],
+          "numberOfTravelers": 0
+        },
+        "budget": {
+          "total": 0,
+          "spent": 0,
+          "currency": "USD"
+        },
+        "tips": [],
+        "suggestions": [],
+        "isPublic": true,
+        "shareType": "public",
+        "createdAt": "2025-08-09T11:29:38.144Z",
+        "updatedAt": "2025-08-09T11:29:38.144Z"
+      }
+    ]
+  ],
+  "pois": [
+    {
+      "id": "1754768877045v4xtc2n5xui",
+      "name": "13",
+      "coordinates": {
+        "lat": 2.232802470556805,
+        "lng": 35.729256346821785
+      },
+      "user": {
+        "id": "dev-user-12345",
+        "email": "dev@tripyy.com",
+        "name": "Developer User"
+      },
+      "createdAt": "2025-08-09T19:47:57.045Z",
+      "review": "",
+      "icon": "🥾",
+      "description": "No description provided",
+      "photo": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754768871/tripyy/pas2wf3kz39dpitrgaip.jpg",
+      "type": "public",
+      "author": "devuser",
+      "reviews": [
+        {
+          "id": "1754769240877uokpmhmnlfs",
+          "rating": 5,
+          "text": "Cool",
+          "author": "devuser",
+          "authorPhoto": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754746010/tripyy/xekmybaheywv1aqjfmkc.jpg",
+          "photo": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754769240/tripyy/hdgrlxwqoceney4jcgwc.jpg",
+          "createdAt": "2025-08-09T19:54:00.877Z",
+          "likes": []
+        },
+        {
+          "id": "1754769561928h780u00407r",
+          "rating": 4,
+          "text": "Cool",
+          "author": "devuser",
+          "authorPhoto": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754746010/tripyy/xekmybaheywv1aqjfmkc.jpg",
+          "photo": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754769561/tripyy/yrmjfqrbhqvzdnhcvuko.jpg",
+          "createdAt": "2025-08-09T19:59:21.928Z",
+          "likes": []
+        }
+      ],
+      "averageRating": 4.5,
+      "reviewCount": 2
+    },
+    {
+      "id": "1754775895497ywyvkhaw7cr",
+      "name": "33",
+      "coordinates": {
+        "lat": 1.6520356018107074,
+        "lng": 40.07171720266342
+      },
+      "user": {
+        "id": "dev-user-12345",
+        "email": "dev@tripyy.com",
+        "name": "Developer User"
+      },
+      "createdAt": "2025-08-09T21:44:55.497Z",
+      "review": "",
+      "icon": "✈️",
+      "description": "Zxc",
+      "photo": "https://res.cloudinary.com/djnd4utmi/image/upload/v1754775885/tripyy/h2uvpptcne4y3wfqw1z5.jpg",
+      "type": "public",
+      "author": "devuser"
+    }
+  ],
+  "timestamp": "2025-08-11T08:54:41.781Z"
+}

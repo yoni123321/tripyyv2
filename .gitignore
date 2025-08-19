@@ -41,7 +41,6 @@ yarn-error.*
 .env.production
 
 # Data files (since we're moving to database)
-data/data.json
 uploads/
 
 # Logs
