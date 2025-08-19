@@ -9,6 +9,7 @@
     "dev": "nodemon server-simple.js",
     "migrate": "node migrate-data.js",
     "seed": "node seed-data.js",
+    "migrate-railway": "node migrate-to-railway.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
