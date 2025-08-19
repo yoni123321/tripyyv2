@@ -8,6 +8,7 @@
     "prod": "node server-simple.js",
     "dev": "nodemon server-simple.js",
     "migrate": "node migrate-data.js",
+    "seed": "node seed-data.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
