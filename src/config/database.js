@@ -80,7 +80,9 @@ const initDatabase = async () => {
         friends JSONB DEFAULT '[]',
         likes INTEGER DEFAULT 0,
         posts JSONB DEFAULT '[]',
-        communities JSONB DEFAULT '[]'
+        communities JSONB DEFAULT '[]',
+        trips JSONB DEFAULT '[]',
+        last_known_location JSONB
       )
     `);
 
@@ -156,9 +158,57 @@ const initDatabase = async () => {
     `);
 
     console.log('✅ Database tables initialized successfully');
+    
+    // Add missing columns to existing tables if they don't exist
+    await addMissingColumns();
+    
   } catch (error) {
     console.error('❌ Error initializing database:', error);
     throw error;
+  }
+};
+
+// Function to add missing columns to existing tables
+const addMissingColumns = async () => {
+  try {
+    console.log('🔧 Checking for missing columns...');
+    
+    // Check if trips column exists in users table
+    const tripsColumnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'trips'
+    `);
+    
+    if (tripsColumnCheck.rows.length === 0) {
+      console.log('➕ Adding trips column to users table...');
+      await pool.query(`
+        ALTER TABLE users 
+        ADD COLUMN trips JSONB DEFAULT '[]'
+      `);
+      console.log('✅ trips column added');
+    }
+    
+    // Check if last_known_location column exists in users table
+    const locationColumnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'last_known_location'
+    `);
+    
+    if (locationColumnCheck.rows.length === 0) {
+      console.log('➕ Adding last_known_location column to users table...');
+      await pool.query(`
+        ALTER TABLE users 
+        ADD COLUMN last_known_location JSONB
+      `);
+      console.log('✅ last_known_location column added');
+    }
+    
+    console.log('✅ All missing columns added successfully');
+  } catch (error) {
+    console.error('❌ Error adding missing columns:', error);
+    // Don't throw error here, just log it
   }
 };
 
