@@ -39,6 +39,12 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async getUserByName(name) {
+    const query = 'SELECT * FROM users WHERE name = $1';
+    const result = await pool.query(query, [name]);
+    return result.rows[0];
+  }
+
   async getUserById(userId) {
     const query = 'SELECT * FROM users WHERE id = $1';
     const result = await pool.query(query, [userId]);

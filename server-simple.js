@@ -320,6 +320,69 @@ app.post('/api/migrate', async (req, res) => {
       }
     }
     
+    // Migrate communities from user data
+    console.log('🏘️ Migrating communities...');
+    for (const [email, userData] of data.users || []) {
+      if (userData.communities && userData.communities.length > 0) {
+        for (const communityData of userData.communities) {
+          try {
+            const user = await dbService.getUserByEmail(email);
+            if (!user) {
+              console.log(`⚠️ Skipping community ${communityData.name} - user not found`);
+              continue;
+            }
+            
+            const communityId = await dbService.createCommunity({
+              name: communityData.name,
+              description: communityData.description || '',
+              createdBy: user.id,
+              members: communityData.members || [],
+              createdAt: new Date(communityData.createdAt)
+            });
+            
+            console.log(`✅ Community migrated: ${communityData.name} (ID: ${communityId})`);
+            migratedCount++;
+          } catch (error) {
+            console.error(`❌ Failed to migrate community ${communityData.name}:`, error.message);
+          }
+        }
+      }
+    }
+    
+    // Migrate posts from user data
+    console.log('📝 Migrating posts...');
+    for (const [email, userData] of data.users || []) {
+      if (userData.posts && userData.posts.length > 0) {
+        for (const postData of userData.posts) {
+          try {
+            const user = await dbService.getUserByEmail(email);
+            if (!user) {
+              console.log(`⚠️ Skipping post - user not found`);
+              continue;
+            }
+            
+            const postId = await dbService.createPost({
+              userId: user.id,
+              content: postData.content || '',
+              photos: postData.photos || [],
+              location: postData.location || '',
+              connectedPOI: postData.connectedPOI || '',
+              likes: postData.likes || [],
+              comments: postData.comments || [],
+              likeCount: postData.likes?.length || 0,
+              commentCount: postData.comments?.length || 0,
+              createdAt: new Date(postData.createdAt)
+            });
+            
+            console.log(`✅ Post migrated for user ${email}`);
+            migratedCount++;
+          } catch (error) {
+            console.error(`❌ Failed to migrate post for user ${email}:`, error.message);
+          }
+        }
+      }
+    }
+    
     console.log('🎉 Migration completed successfully!');
     res.json({
       status: 'success',
@@ -328,7 +391,8 @@ app.post('/api/migrate', async (req, res) => {
       summary: {
         users: data.users?.length || 0,
         trips: data.trips?.length || 0,
-        pois: data.pois?.length || 0
+        pois: data.pois?.length || 0,
+        communities: 'Migrated from user data'
       }
     });
     
@@ -709,20 +773,38 @@ app.get('/api/user/friends', authenticateUser, async (req, res) => {
     const friendsList = [];
     if (user.friends && Array.isArray(user.friends)) {
       for (const friendId of user.friends) {
-        const friend = await dbService.getUserById(friendId);
-        if (friend) {
-          friendsList.push({
-            id: friend.id,
-            name: friend.name,
-            email: friend.email,
-            travelerProfile: friend.travelerProfile,
-            lastKnownLocation: friend.lastKnownLocation
-          });
+        try {
+          // Handle both numeric IDs and string IDs
+          let friend;
+          if (typeof friendId === 'number' || !isNaN(friendId)) {
+            friend = await dbService.getUserById(friendId);
+          } else {
+            // For string IDs like "friend-1", try to find by email or name
+            friend = await dbService.getUserByEmail(friendId);
+            if (!friend) {
+              // Try to find by name if it looks like a name
+              friend = await dbService.getUserByName(friendId);
+            }
+          }
+          
+          if (friend) {
+            friendsList.push({
+              id: friend.id,
+              name: friend.name,
+              email: friend.email,
+              travelerProfile: friend.traveler_profile,
+              lastKnownLocation: friend.last_known_location
+            });
+          } else {
+            console.log(`⚠️ Friend not found: ${friendId}`);
+          }
+        } catch (friendError) {
+          console.error(`Error looking up friend ${friendId}:`, friendError.message);
         }
       }
     }
     
-    console.log(`👥 Friends for user ${req.userId}:`, friendsList.map(f => f.name));
+    console.log(`👥 Friends for user ${req.userId}: ${friendsList.length} found`);
     res.json({ data: { friends: friendsList } });
   } catch (error) {
     console.error('Get user friends error:', error);
