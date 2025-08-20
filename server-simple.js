@@ -164,14 +164,38 @@ app.post('/api/migrate', async (req, res) => {
   try {
     console.log('🚀 Migration endpoint triggered...');
     
+    // Check for force migration parameter
+    const forceMigration = req.query.force === 'true';
+    console.log(`🔧 Force migration: ${forceMigration}`);
+    
     // Check if data already exists
     const userCount = await dbService.getUserCount();
-    if (userCount > 0) {
-      return res.json({
-        status: 'skipped',
-        message: 'Database already has data, migration skipped',
-        userCount
-      });
+    console.log(`🔍 Current user count in database: ${userCount}`);
+    
+    // If we have users, check if they're the ones we want to migrate
+    if (userCount > 0 && !forceMigration) {
+      const existingUser = await dbService.getUserByEmail('dev@tripyy.com');
+      if (existingUser) {
+        console.log('⚠️ User dev@tripyy.com already exists, checking if migration is needed...');
+        
+        // Check if we have the expected data
+        const hasTrips = existingUser.trips && existingUser.trips.length > 0;
+        const hasPOIs = await dbService.getPOICount() > 0;
+        
+        if (hasTrips && hasPOIs) {
+          return res.json({
+            status: 'already_migrated',
+            message: 'Data appears to already be migrated. Use ?force=true to force migration.',
+            userCount,
+            hasTrips,
+            hasPOIs
+          });
+        } else {
+          console.log('🔄 Partial data found, continuing with migration...');
+        }
+      } else {
+        console.log('🔄 Users exist but not the expected ones, continuing with migration...');
+      }
     }
     
     // Read and parse data.json

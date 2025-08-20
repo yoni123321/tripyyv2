@@ -51,6 +51,12 @@ class DatabaseService {
     return parseInt(result.rows[0].count);
   }
 
+  async getPOICount() {
+    const query = 'SELECT COUNT(*) FROM pois';
+    const result = await pool.query(query);
+    return parseInt(result.rows[0].count);
+  }
+
   async updateUser(email, updates) {
     // Build dynamic update query based on what's provided
     const updateFields = [];
