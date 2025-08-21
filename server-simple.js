@@ -1029,7 +1029,7 @@ app.get('/api/communities', async (req, res) => {
     }));
     
     console.log(`🏘️ Returning ${enrichedCommunities.length} communities with enriched member data`);
-    res.json({ communities: enrichedCommunities });
+    res.json({ data: { communities: enrichedCommunities } });
   } catch (error) {
     console.error('Get communities error:', error);
     res.status(500).json({ error: 'Failed to get communities' });
@@ -1041,7 +1041,7 @@ app.get('/api/search', authenticateUser, async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
     if (!q || q.length < 2) {
-      return res.json({ users: [], communities: [] });
+      return res.json({ data: { results: { users: [], communities: [] } } });
     }
 
     // Search users and communities using database service
@@ -1066,7 +1066,7 @@ app.get('/api/search', authenticateUser, async (req, res) => {
       memberCount: community.members ? community.members.length : 0,
     }));
 
-    res.json({ users: formattedUsers, communities: formattedCommunities });
+    res.json({ data: { results: { users: formattedUsers, communities: formattedCommunities } } });
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Failed to search' });
@@ -1100,7 +1100,7 @@ app.post('/api/communities/:communityId/join', authenticateUser, async (req, res
     const userId = req.userId;
     
     const result = await dbService.joinCommunity(userId, communityId);
-    res.json({ message: 'Successfully joined community', community: result });
+    res.json({ data: { message: 'Successfully joined community', community: result } });
   } catch (error) {
     console.error('Join community error:', error);
     res.status(500).json({ error: 'Failed to join community' });
@@ -1114,7 +1114,7 @@ app.post('/api/communities/:communityId/leave', authenticateUser, async (req, re
     const userId = req.userId;
     
     const result = await dbService.leaveCommunity(userId, communityId);
-    res.json({ message: 'Successfully left community', community: result });
+    res.json({ data: { message: 'Successfully left community', community: result } });
   } catch (error) {
     console.error('Leave community error:', error);
     res.status(500).json({ error: 'Failed to leave community' });
@@ -1138,7 +1138,7 @@ app.post('/api/communities/:communityId/leave', authenticateUser, async (req, re
     await dbService.updateUser(user.email, { communities: userCommunities });
 
     console.log('🏘️ New community created:', savedCommunity);
-    res.status(201).json({ message: 'Community created', community: savedCommunity });
+    res.status(201).json({ data: { message: 'Community created', community: savedCommunity } });
   } catch (error) {
     console.error('❌ Error creating community:', error);
     res.status(500).json({ error: 'Failed to create community' });
@@ -1291,7 +1291,7 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
 
     await dbService.updateUser(user.email, { trips: userTrips });
 
-    res.json(savedTrip);
+    res.json({ data: { trip: savedTrip } });
   } catch (error) {
     console.error('Create trip error:', error);
     res.status(500).json({ error: 'Failed to create trip' });
@@ -1301,7 +1301,7 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
 app.get('/api/trips', authenticateUser, async (req, res) => {
   try {
     const userTrips = await dbService.getUserTrips(req.userId);
-    res.json(userTrips);
+    res.json({ data: { trips: userTrips } });
   } catch (error) {
     console.error('Get trips error:', error);
     res.status(500).json({ error: 'Failed to get trips' });
@@ -1359,7 +1359,7 @@ app.put('/api/trips/:id', authenticateUser, async (req, res) => {
       }
     }
     
-    res.json(updated);
+    res.json({ data: { trip: updated } });
   } catch (error) {
     console.error('Update trip error:', error);
     res.status(500).json({ error: 'Failed to update trip' });
@@ -1382,7 +1382,7 @@ app.delete('/api/trips/:id', authenticateUser, async (req, res) => {
       await dbService.updateUser(user.email, { trips: user.trips });
     }
     
-    res.json({ success: true });
+    res.json({ data: { success: true } });
   } catch (error) {
     console.error('Delete trip error:', error);
     res.status(500).json({ error: 'Failed to delete trip' });
@@ -1436,7 +1436,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     await dbService.updateUser(user.email, { posts: userPosts });
 
     console.log('📝 New post created:', savedPost);
-    res.status(201).json({ message: 'Post created', post: savedPost });
+    res.status(201).json({ data: { message: 'Post created', post: savedPost } });
   } catch (error) {
     console.error('❌ Error creating post:', error);
     res.status(500).json({ error: 'Failed to create post' });
@@ -1472,7 +1472,7 @@ app.get('/api/pois', async (req, res) => {
     console.log(`📍 Returning ${transformedPois.length} POIs with transformed data structure`);
     console.log('📍 Sample POI data:', transformedPois[0]);
     
-    res.json({ pois: transformedPois });
+    res.json({ data: { pois: transformedPois } });
   } catch (error) {
     console.error('Get POIs error:', error);
     res.status(500).json({ error: 'Failed to get POIs' });
@@ -1516,7 +1516,7 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     const savedPoi = await dbService.getPOIById(savedPoiId);
     
     console.log('📍 New POI added with ID:', savedPoiId);
-    res.status(201).json({ message: 'POI added', poi: savedPoi });
+    res.status(201).json({ data: { message: 'POI added', poi: savedPoi } });
   } catch (error) {
     console.error('❌ Error adding POI:', error);
     res.status(500).json({ error: 'Failed to add POI' });
@@ -1571,7 +1571,7 @@ app.put('/api/pois', authenticateUser, async (req, res) => {
     }
 
     const updatedPoi = await dbService.updatePOI(poi.id, updates);
-    return res.json({ message: 'POI updated', poi: updatedPoi });
+    return res.json({ data: { message: 'POI updated', poi: updatedPoi } });
   } catch (error) {
     console.error('❌ Error updating POI:', error);
     return res.status(500).json({ error: 'Failed to update POI' });
@@ -1621,7 +1621,7 @@ app.delete('/api/pois', authenticateUser, async (req, res) => {
       console.warn('⚠️ Error attempting to delete Cloudinary image:', cloudErr);
     }
 
-    return res.json({ message: 'POI deleted', poi: deleted });
+    return res.json({ data: { message: 'POI deleted', poi: deleted } });
   } catch (error) {
     console.error('❌ Error deleting POI:', error);
     return res.status(500).json({ error: 'Failed to delete POI' });
@@ -1850,7 +1850,7 @@ app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, async 
       comment_count: foundPost.comments.length
     });
     
-    res.json({ success: true, post: updatedPost });
+    res.json({ data: { success: true, post: updatedPost } });
   } catch (error) {
     console.error('❌ Error liking comment:', error);
     res.status(500).json({ error: 'Failed to like comment' });
@@ -2019,7 +2019,7 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
       createdAt: user.created_at
     };
     
-    res.json({ data: profileData });
+    res.json({ data: { user: profileData } });
   } catch (error) {
     console.error('❌ Error getting user profile:', error);
     res.status(500).json({ error: 'Failed to get user profile' });
@@ -2061,7 +2061,7 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
     }
 
     // Return user profile data
-    res.json({
+    res.json({ data: { user: {
       id: user.id,
       name: user.name,
       email: user.email,
@@ -2069,7 +2069,7 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
       travelerProfile: user.traveler_profile,
       photo: user.traveler_profile?.photo || null,
       lastKnownLocation: user.last_known_location
-    });
+    } } });
   } catch (error) {
     console.error('Get user profile error:', error);
     res.status(500).json({ error: 'Failed to get user profile' });
