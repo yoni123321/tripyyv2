@@ -666,14 +666,26 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
 
     console.log(`✅ Found user: ${user.email}`);
     const travelerProfile = user.traveler_profile || {};
-    const merged = {
-      ...travelerProfile,
-      photo: (travelerProfile && travelerProfile.photo) || user.photo || null
-    };
-    console.log(`📝 Current profile:`, JSON.stringify(travelerProfile, null, 2));
     
-    // Return a stable shape used by the app
-    res.json({ travelerProfile: merged });
+    // Ensure all personal information fields are present with defaults
+    const merged = {
+      name: user.name || '',
+      nickname: travelerProfile.nickname || '',
+      birthday: travelerProfile.birthday || null,
+      photo: (travelerProfile && travelerProfile.photo) || user.photo || null,
+      age: travelerProfile.age || 0,
+      interests: travelerProfile.interests || [],
+      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
+      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+      numberOfTravelers: travelerProfile.numberOfTravelers || 0,
+      // Include any other fields from traveler_profile
+      ...travelerProfile
+    };
+    
+    console.log(`📝 Current profile:`, JSON.stringify(merged, null, 2));
+    
+    // Return a stable shape used by the app, wrapped in data format
+    res.json({ data: { travelerProfile: merged } });
   } catch (error) {
     console.error('❌ Get profile error:', error);
     res.status(500).json({ error: 'Failed to get profile' });
@@ -711,7 +723,7 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     console.log(`✅ Profile updated successfully`);
     console.log(`📝 Saved profile:`, JSON.stringify(savedProfile, null, 2));
 
-    res.json({ travelerProfile: savedProfile });
+    res.json({ data: { travelerProfile: savedProfile } });
   } catch (error) {
     console.error('❌ Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -821,86 +833,9 @@ app.get('/api/user/friends', authenticateUser, async (req, res) => {
   }
 });
 
-// User traveler profile endpoint
-app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
-  try {
-    const user = await dbService.getUserById(req.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+// User traveler profile endpoint (removed duplicate - using the first one above)
 
-    // Parse the traveler profile from JSONB
-    const travelerProfile = user.traveler_profile || {};
-    
-    res.json({
-      name: user.name,
-      nickname: travelerProfile.nickname || '',
-      birthday: travelerProfile.birthday || null,
-      photo: travelerProfile.photo || null,
-      age: travelerProfile.age || 0,
-      interests: travelerProfile.interests || [],
-      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
-      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
-      numberOfTravelers: travelerProfile.numberOfTravelers || 0
-    });
-  } catch (error) {
-    console.error('Get traveler profile error:', error);
-    res.status(500).json({ error: 'Failed to get traveler profile' });
-  }
-});
-
-// Update traveler profile endpoint
-app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
-  try {
-    const { name, nickname, birthday, photo, age, interests, dietaryRestrictions, accessibilityNeeds, numberOfTravelers } = req.body;
-    
-    const user = await dbService.getUserById(req.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Handle both direct field updates and nested travelerProfile object
-    let updateData;
-    if (req.body.travelerProfile) {
-      // Frontend sends: { travelerProfile: { name, nickname, ... } }
-      updateData = req.body.travelerProfile;
-    } else {
-      // Direct field updates: { name, nickname, ... }
-      updateData = req.body;
-    }
-
-    const { name: nameUpdate, nickname: nicknameUpdate, birthday: birthdayUpdate, photo: photoUpdate, age: ageUpdate, interests: interestsUpdate, dietaryRestrictions: dietaryRestrictionsUpdate, accessibilityNeeds: accessibilityNeedsUpdate, numberOfTravelers: numberOfTravelersUpdate } = updateData;
-
-    // Update the traveler profile
-    const updatedProfile = {
-      ...user.traveler_profile,
-      name: nameUpdate || user.traveler_profile?.name,
-      nickname: nicknameUpdate || user.traveler_profile?.nickname,
-      birthday: birthdayUpdate || user.traveler_profile?.birthday,
-      photo: photoUpdate || user.traveler_profile?.photo,
-      age: ageUpdate || user.traveler_profile?.age,
-      interests: interestsUpdate || user.traveler_profile?.interests,
-      dietaryRestrictions: dietaryRestrictionsUpdate || user.traveler_profile?.dietaryRestrictions,
-      accessibilityNeeds: accessibilityNeedsUpdate || user.traveler_profile?.accessibilityNeeds,
-      numberOfTravelers: numberOfTravelersUpdate || user.traveler_profile?.numberOfTravelers
-    };
-
-    // Update user in database
-    const updateUserData = {
-      travelerProfile: updatedProfile
-    };
-
-    const updatedUser = await dbService.updateUser(user.email, updateUserData);
-
-    res.json({
-      message: 'Traveler profile updated successfully',
-      profile: updatedProfile
-    });
-  } catch (error) {
-    console.error('Update traveler profile error:', error);
-    res.status(500).json({ error: 'Failed to update traveler profile' });
-  }
-});
+// Update traveler profile endpoint (removed duplicate - using the first one above)
 
 // Check nickname availability endpoint (frontend compatible)
 app.get('/api/check-nickname/:nickname', async (req, res) => {
