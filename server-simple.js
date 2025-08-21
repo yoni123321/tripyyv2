@@ -665,9 +665,11 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     }
 
     console.log(`✅ Found user: ${user.email}`);
-    console.log(`📝 Current profile:`, JSON.stringify(user.travelerProfile, null, 2));
+    const travelerProfile = user.traveler_profile || {};
+    console.log(`📝 Current profile:`, JSON.stringify(travelerProfile, null, 2));
     
-    res.json({ travelerProfile: user.travelerProfile });
+    // Return a stable shape used by the app
+    res.json({ travelerProfile });
   } catch (error) {
     console.error('❌ Get profile error:', error);
     res.status(500).json({ error: 'Failed to get profile' });
@@ -676,9 +678,9 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
 
 app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   try {
-    const { travelerProfile } = req.body;
+    const incomingTravelerProfile = req.body?.travelerProfile || req.body || {};
     console.log(`💾 Updating traveler profile for user: ${req.userId}`);
-    console.log(`📝 New profile data:`, JSON.stringify(travelerProfile, null, 2));
+    console.log(`📝 New profile data:`, JSON.stringify(incomingTravelerProfile, null, 2));
     
     // Get user from database by ID
     const user = await dbService.getUserById(req.userId);
@@ -689,20 +691,23 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     }
 
     console.log(`✅ Found user: ${user.email}`);
-    console.log(`📝 Previous profile:`, JSON.stringify(user.travelerProfile, null, 2));
+    const previousProfile = user.traveler_profile || {};
+    console.log(`📝 Previous profile:`, JSON.stringify(previousProfile, null, 2));
     
-    // Update user profile in database
-    await dbService.updateUser(user.email, {
-      travelerProfile: { ...user.travelerProfile, ...travelerProfile }
-    });
-    
-    console.log(`✅ Profile updated successfully`);
-    console.log(`📝 Updated profile:`, JSON.stringify(user.travelerProfile, null, 2));
+    // Merge with existing profile
+    const mergedProfile = { ...previousProfile, ...incomingTravelerProfile };
 
-    res.json({ 
-      message: 'Profile updated successfully',
-      travelerProfile: user.travelerProfile 
-    });
+    // Persist to database
+    await dbService.updateUser(user.email, { travelerProfile: mergedProfile });
+
+    // Reload fresh user from DB to ensure we return the saved state
+    const refreshed = await dbService.getUserById(req.userId);
+    const savedProfile = refreshed?.traveler_profile || mergedProfile;
+
+    console.log(`✅ Profile updated successfully`);
+    console.log(`📝 Saved profile:`, JSON.stringify(savedProfile, null, 2));
+
+    res.json({ travelerProfile: savedProfile });
   } catch (error) {
     console.error('❌ Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
