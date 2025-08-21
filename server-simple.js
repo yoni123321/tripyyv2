@@ -124,7 +124,24 @@ app.use((req, res, next) => {
   if (req.body && Object.keys(req.body).length > 0) {
     console.log(`   📝 Request body:`, JSON.stringify(req.body, null, 2));
   }
+  if (req.headers.authorization) {
+    console.log(`   🔐 Authorization: Bearer ${req.headers.authorization.substring(0, 20)}...`);
+  }
   next();
+});
+
+// Test endpoint to verify PUT requests work
+app.put('/api/test-put', (req, res) => {
+  console.log('🧪 Test PUT endpoint called');
+  console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+  res.json({ data: { message: 'PUT endpoint working', received: req.body } });
+});
+
+// Simple test endpoint without authentication
+app.put('/api/test-simple', (req, res) => {
+  console.log('🧪 Simple test PUT endpoint called');
+  console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+  res.json({ data: { message: 'Simple PUT endpoint working', received: req.body } });
 });
 
 // Health check endpoint
