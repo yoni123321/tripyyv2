@@ -666,10 +666,14 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
 
     console.log(`✅ Found user: ${user.email}`);
     const travelerProfile = user.traveler_profile || {};
+    const merged = {
+      ...travelerProfile,
+      photo: (travelerProfile && travelerProfile.photo) || user.photo || null
+    };
     console.log(`📝 Current profile:`, JSON.stringify(travelerProfile, null, 2));
     
     // Return a stable shape used by the app
-    res.json({ travelerProfile });
+    res.json({ travelerProfile: merged });
   } catch (error) {
     console.error('❌ Get profile error:', error);
     res.status(500).json({ error: 'Failed to get profile' });
@@ -1197,7 +1201,12 @@ app.get('/api/posts', async (req, res) => {
     enrichedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
     console.log(`📝 Returning ${enrichedPosts.length} posts`);
-    res.json({ posts: enrichedPosts });
+    const normalizedPosts = enrichedPosts.map(p => ({
+      ...p,
+      connected_poi: p.connected_poi ?? p.connectedPOI ?? '',
+      created_at: p.created_at ?? null
+    }));
+    res.json({ data: { posts: normalizedPosts } });
   } catch (error) {
     console.error('Get posts error:', error);
     res.status(500).json({ error: 'Failed to get posts' });
@@ -1396,7 +1405,8 @@ app.delete('/api/trips/:id', authenticateUser, async (req, res) => {
 
 app.post('/api/posts', authenticateUser, async (req, res) => {
   try {
-    const { content, location, connectedPOI } = req.body;
+    const { content, location } = req.body;
+    const connectedPOINormalized = req.body?.connected_poi ?? req.body?.connectedPOI ?? '';
     if (!content) {
       return res.status(400).json({ error: 'Post content is required' });
     }
@@ -1410,7 +1420,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
       userId: user.id,
       content,
       location: location || '',
-      connectedPOI: connectedPOI || '',
+      connectedPOI: connectedPOINormalized || '',
       likes: [],
       comments: [],
       createdAt: new Date().toISOString(),
@@ -1441,7 +1451,12 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     await dbService.updateUser(user.email, { posts: userPosts });
 
     console.log('📝 New post created:', savedPost);
-    res.status(201).json({ data: { message: 'Post created', post: savedPost } });
+    const responsePost = {
+      ...savedPost,
+      connected_poi: savedPost.connected_poi ?? connectedPOINormalized,
+      created_at: savedPost.created_at ?? post.createdAt
+    };
+    res.status(201).json({ data: { post: responsePost } });
   } catch (error) {
     console.error('❌ Error creating post:', error);
     res.status(500).json({ error: 'Failed to create post' });
@@ -1454,30 +1469,37 @@ app.get('/api/pois', async (req, res) => {
     const pois = await dbService.getAllPOIs();
     
     // Transform POI data to match frontend expectations
-    const transformedPois = pois.map(poi => ({
-      id: poi.id,
-      name: poi.name,
-      description: poi.description,
-      coordinates: poi.location, // Map location back to coordinates for frontend
-      photo: poi.photos && Array.isArray(poi.photos) && poi.photos.length > 0 ? poi.photos[0] : null, // Map photos array to single photo
-      icon: poi.icon,
-      type: poi.type,
-      author: poi.author,
-      user: {
-        id: poi.user_id,
-        email: poi.user_email || '',
-        name: poi.user_name || poi.author || ''
-      },
-      createdAt: poi.created_at,
-      reviews: poi.reviews || [],
-      averageRating: poi.average_rating || 0,
-      reviewCount: poi.review_count || 0
-    }));
+    const transformedPois = pois.map(poi => {
+      const loc = poi.location || {};
+      const lat = typeof loc.lat === 'number' ? loc.lat : (typeof loc.latitude === 'number' ? loc.latitude : null);
+      const lng = typeof loc.lng === 'number' ? loc.lng : (typeof loc.longitude === 'number' ? loc.longitude : null);
+      return {
+        id: poi.id,
+        name: poi.name ?? null,
+        description: poi.description ?? null,
+        // Always include coordinates with {lat, lng}
+        coordinates: lat != null && lng != null ? { lat, lng } : null,
+        // Provide photo as first photo if present
+        photo: poi.photos && Array.isArray(poi.photos) && poi.photos.length > 0 ? poi.photos[0] : null,
+        icon: poi.icon ?? null,
+        type: poi.type ?? null,
+        author: poi.author ?? null,
+        user: {
+          id: poi.user_id ?? null,
+          email: poi.user_email || '',
+          name: poi.user_name || poi.author || ''
+        },
+        created_at: poi.created_at ?? null,
+        reviews: poi.reviews || [],
+        average_rating: poi.average_rating ?? 0,
+        review_count: poi.review_count ?? 0
+      };
+    });
     
     console.log(`📍 Returning ${transformedPois.length} POIs with transformed data structure`);
     console.log('📍 Sample POI data:', transformedPois[0]);
     
-    res.json({ pois: transformedPois });
+    res.json({ data: { pois: transformedPois } });
   } catch (error) {
     console.error('Get POIs error:', error);
     res.status(500).json({ error: 'Failed to get POIs' });
@@ -1486,8 +1508,23 @@ app.get('/api/pois', async (req, res) => {
 
 app.post('/api/pois', authenticateUser, async (req, res) => {
   try {
-    const { name, coordinates, review, icon, description, photo, type, author } = req.body;
-    if (!name || !coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lng !== 'number') {
+    const { name, icon, description, photo, type, author } = req.body || {};
+    // Accept both { coordinates: {lat,lng} } and { location: {latitude, longitude} } or { location: {lat,lng} }
+    const bodyCoords = req.body?.coordinates;
+    const bodyLoc = req.body?.location;
+    let lat = null;
+    let lng = null;
+    if (bodyCoords && typeof bodyCoords.lat === 'number' && typeof bodyCoords.lng === 'number') {
+      lat = bodyCoords.lat;
+      lng = bodyCoords.lng;
+    } else if (bodyLoc) {
+      if (typeof bodyLoc.lat === 'number' && typeof bodyLoc.lng === 'number') {
+        lat = bodyLoc.lat; lng = bodyLoc.lng;
+      } else if (typeof bodyLoc.latitude === 'number' && typeof bodyLoc.longitude === 'number') {
+        lat = bodyLoc.latitude; lng = bodyLoc.longitude;
+      }
+    }
+    if (!name || typeof lat !== 'number' || typeof lng !== 'number') {
       return res.status(400).json({ error: 'Name and valid coordinates are required' });
     }
     
@@ -1497,10 +1534,12 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     }
 
     // Map frontend data structure to backend database structure
+    // Persist both coordinates and location {lat,lng} for backward compatibility
+    const locationPayload = { lat, lng, coordinates: { lat, lng }, latitude: lat, longitude: lng };
     const poi = {
       name,
-      location: coordinates, // Map coordinates to location
-      photos: photo ? [photo] : [], // Map single photo to photos array
+      location: locationPayload,
+      photos: photo ? [photo] : [],
       icon: icon || '',
       type: type || 'public',
       author: author || user.traveler_profile?.nickname || user.name || '',
@@ -1519,9 +1558,28 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     
     // Get the created POI to return
     const savedPoi = await dbService.getPOIById(savedPoiId);
+    // Normalize response to include coordinates at top-level
+    const loc = savedPoi.location || {};
+    const respLat = typeof loc.lat === 'number' ? loc.lat : (typeof loc.latitude === 'number' ? loc.latitude : null);
+    const respLng = typeof loc.lng === 'number' ? loc.lng : (typeof loc.longitude === 'number' ? loc.longitude : null);
+    const responsePoi = {
+      id: savedPoi.id,
+      name: savedPoi.name ?? null,
+      description: savedPoi.description ?? null,
+      coordinates: respLat != null && respLng != null ? { lat: respLat, lng: respLng } : null,
+      photo: savedPoi.photos && Array.isArray(savedPoi.photos) && savedPoi.photos.length > 0 ? savedPoi.photos[0] : null,
+      icon: savedPoi.icon ?? null,
+      type: savedPoi.type ?? null,
+      author: savedPoi.author ?? null,
+      user: { id: savedPoi.user_id ?? null },
+      created_at: savedPoi.created_at ?? null,
+      reviews: savedPoi.reviews || [],
+      average_rating: savedPoi.average_rating ?? 0,
+      review_count: savedPoi.review_count ?? 0
+    };
     
     console.log('📍 New POI added with ID:', savedPoiId);
-    res.status(201).json({ data: { message: 'POI added', poi: savedPoi } });
+    res.status(201).json({ data: { poi: responsePoi } });
   } catch (error) {
     console.error('❌ Error adding POI:', error);
     res.status(500).json({ error: 'Failed to add POI' });
