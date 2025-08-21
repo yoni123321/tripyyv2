@@ -75,6 +75,18 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async joinCommunity(userId, communityId) {
+    const query = 'UPDATE communities SET members = array_append(members, $1) WHERE id = $2 RETURNING *';
+    const result = await pool.query(query, [userId, communityId]);
+    return result.rows[0];
+  }
+
+  async leaveCommunity(userId, communityId) {
+    const query = 'UPDATE communities SET members = array_remove(members, $1) WHERE id = $2 RETURNING *';
+    const result = await pool.query(query, [userId, communityId]);
+    return result.rows[0];
+  }
+
   async updateUser(email, updates) {
     // Build dynamic update query based on what's provided
     const updateFields = [];

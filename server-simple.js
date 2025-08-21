@@ -850,26 +850,38 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Handle both direct field updates and nested travelerProfile object
+    let updateData;
+    if (req.body.travelerProfile) {
+      // Frontend sends: { travelerProfile: { name, nickname, ... } }
+      updateData = req.body.travelerProfile;
+    } else {
+      // Direct field updates: { name, nickname, ... }
+      updateData = req.body;
+    }
+
+    const { name: nameUpdate, nickname: nicknameUpdate, birthday: birthdayUpdate, photo: photoUpdate, age: ageUpdate, interests: interestsUpdate, dietaryRestrictions: dietaryRestrictionsUpdate, accessibilityNeeds: accessibilityNeedsUpdate, numberOfTravelers: numberOfTravelersUpdate } = updateData;
+
     // Update the traveler profile
     const updatedProfile = {
       ...user.traveler_profile,
-      name: name || user.traveler_profile?.name,
-      nickname: nickname || user.traveler_profile?.nickname,
-      birthday: birthday || user.traveler_profile?.birthday,
-      photo: photo || user.traveler_profile?.photo,
-      age: age || user.traveler_profile?.age,
-      interests: interests || user.traveler_profile?.interests,
-      dietaryRestrictions: dietaryRestrictions || user.traveler_profile?.dietaryRestrictions,
-      accessibilityNeeds: accessibilityNeeds || user.traveler_profile?.accessibilityNeeds,
-      numberOfTravelers: numberOfTravelers || user.traveler_profile?.numberOfTravelers
+      name: nameUpdate || user.traveler_profile?.name,
+      nickname: nicknameUpdate || user.traveler_profile?.nickname,
+      birthday: birthdayUpdate || user.traveler_profile?.birthday,
+      photo: photoUpdate || user.traveler_profile?.photo,
+      age: ageUpdate || user.traveler_profile?.age,
+      interests: interestsUpdate || user.traveler_profile?.interests,
+      dietaryRestrictions: dietaryRestrictionsUpdate || user.traveler_profile?.dietaryRestrictions,
+      accessibilityNeeds: accessibilityNeedsUpdate || user.traveler_profile?.accessibilityNeeds,
+      numberOfTravelers: numberOfTravelersUpdate || user.traveler_profile?.numberOfTravelers
     };
 
     // Update user in database
-    const updateData = {
+    const updateUserData = {
       travelerProfile: updatedProfile
     };
 
-    const updatedUser = await dbService.updateUser(user.email, updateData);
+    const updatedUser = await dbService.updateUser(user.email, updateUserData);
 
     res.json({
       message: 'Traveler profile updated successfully',
@@ -881,7 +893,38 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   }
 });
 
-// Check nickname availability endpoint
+// Check nickname availability endpoint (frontend compatible)
+app.get('/api/check-nickname/:nickname', async (req, res) => {
+  try {
+    const { nickname } = req.params;
+    
+    if (!nickname) {
+      return res.status(400).json({ error: 'Nickname is required' });
+    }
+
+    // Check if nickname exists
+    const existingUser = await dbService.getUserByNickname(nickname);
+    
+    if (existingUser) {
+      res.json({ 
+        nickname: nickname,
+        isAvailable: false, 
+        message: 'Nickname already taken' 
+      });
+    } else {
+      res.json({ 
+        nickname: nickname,
+        isAvailable: true, 
+        message: 'Nickname available' 
+      });
+    }
+  } catch (error) {
+    console.error('Check nickname error:', error);
+    res.status(500).json({ error: 'Failed to check nickname availability' });
+  }
+});
+
+// Check nickname availability endpoint (authenticated version)
 app.get('/api/user/check-nickname/:nickname', authenticateUser, async (req, res) => {
   try {
     const { nickname } = req.params;
@@ -1049,6 +1092,34 @@ app.post('/api/communities', authenticateUser, async (req, res) => {
       members: [user.id],
       createdAt: new Date().toISOString(),
     };
+
+// Join community endpoint
+app.post('/api/communities/:communityId/join', authenticateUser, async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const userId = req.userId;
+    
+    const result = await dbService.joinCommunity(userId, communityId);
+    res.json({ message: 'Successfully joined community', community: result });
+  } catch (error) {
+    console.error('Join community error:', error);
+    res.status(500).json({ error: 'Failed to join community' });
+  }
+});
+
+// Leave community endpoint
+app.post('/api/communities/:communityId/leave', authenticateUser, async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const userId = req.userId;
+    
+    const result = await dbService.leaveCommunity(userId, communityId);
+    res.json({ message: 'Successfully left community', community: result });
+  } catch (error) {
+    console.error('Leave community error:', error);
+    res.status(500).json({ error: 'Failed to leave community' });
+  }
+});
 
     // Store community in database
     const savedCommunity = await dbService.createCommunity(community);
@@ -1943,6 +2014,32 @@ app.get('/api/user/trips/:userId', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('❌ Error getting user trips:', error);
     res.status(500).json({ error: 'Failed to get user trips' });
+  }
+});
+
+// User profile endpoint (frontend compatible)
+app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await dbService.getUserById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Return user profile data
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      nickname: user.traveler_profile?.nickname || user.name,
+      travelerProfile: user.traveler_profile,
+      photo: user.traveler_profile?.photo || null,
+      lastKnownLocation: user.last_known_location
+    });
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    res.status(500).json({ error: 'Failed to get user profile' });
   }
 });
 
