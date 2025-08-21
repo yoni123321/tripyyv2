@@ -805,7 +805,7 @@ app.get('/api/user/friends', authenticateUser, async (req, res) => {
     }
     
     console.log(`👥 Friends for user ${req.userId}: ${friendsList.length} found`);
-    res.json({ data: { friends: friendsList } });
+    res.json({ friends: friendsList });
   } catch (error) {
     console.error('Get user friends error:', error);
     res.status(500).json({ error: 'Failed to get user friends' });
@@ -1029,7 +1029,7 @@ app.get('/api/communities', async (req, res) => {
     }));
     
     console.log(`🏘️ Returning ${enrichedCommunities.length} communities with enriched member data`);
-    res.json({ data: { communities: enrichedCommunities } });
+    res.json({ communities: enrichedCommunities });
   } catch (error) {
     console.error('Get communities error:', error);
     res.status(500).json({ error: 'Failed to get communities' });
@@ -1192,7 +1192,7 @@ app.get('/api/posts', async (req, res) => {
     enrichedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
     console.log(`📝 Returning ${enrichedPosts.length} posts`);
-    res.json({ data: { posts: enrichedPosts } });
+    res.json({ posts: enrichedPosts });
   } catch (error) {
     console.error('Get posts error:', error);
     res.status(500).json({ error: 'Failed to get posts' });
@@ -1301,7 +1301,7 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
 app.get('/api/trips', authenticateUser, async (req, res) => {
   try {
     const userTrips = await dbService.getUserTrips(req.userId);
-    res.json({ data: { trips: userTrips } });
+    res.json({ trips: userTrips });
   } catch (error) {
     console.error('Get trips error:', error);
     res.status(500).json({ error: 'Failed to get trips' });
@@ -1472,7 +1472,7 @@ app.get('/api/pois', async (req, res) => {
     console.log(`📍 Returning ${transformedPois.length} POIs with transformed data structure`);
     console.log('📍 Sample POI data:', transformedPois[0]);
     
-    res.json({ data: { pois: transformedPois } });
+    res.json({ pois: transformedPois });
   } catch (error) {
     console.error('Get POIs error:', error);
     res.status(500).json({ error: 'Failed to get POIs' });
