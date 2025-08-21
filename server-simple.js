@@ -868,16 +868,20 @@ app.get('/api/check-nickname/:nickname', async (req, res) => {
       return res.status(400).json({ error: 'Nickname is required' });
     }
 
+    console.log(`🔍 Checking nickname availability for: "${nickname}"`);
+
     // Check if nickname exists
     const existingUser = await dbService.getUserByNickname(nickname);
     
     if (existingUser) {
+      console.log(`❌ Nickname "${nickname}" is already taken by user: ${existingUser.email}`);
       res.json({ data: { 
         nickname: nickname,
         isAvailable: false, 
         message: 'Nickname already taken' 
       } });
     } else {
+      console.log(`✅ Nickname "${nickname}" is available`);
       res.json({ data: { 
         nickname: nickname,
         isAvailable: true, 
@@ -899,12 +903,16 @@ app.get('/api/user/check-nickname/:nickname', authenticateUser, async (req, res)
       return res.status(400).json({ error: 'Nickname is required' });
     }
 
+    console.log(`🔍 [AUTH] Checking nickname availability for: "${nickname}" (user: ${req.userId})`);
+
     // Check if nickname exists (excluding current user)
     const existingUser = await dbService.getUserByNickname(nickname);
     
     if (existingUser && existingUser.id !== req.userId) {
+      console.log(`❌ [AUTH] Nickname "${nickname}" is already taken by user: ${existingUser.email}`);
       res.json({ data: { available: false, message: 'Nickname already taken' } });
     } else {
+      console.log(`✅ [AUTH] Nickname "${nickname}" is available for user: ${req.userId}`);
       res.json({ data: { available: true, message: 'Nickname available' } });
     }
   } catch (error) {
