@@ -144,6 +144,26 @@ app.put('/api/test-simple', (req, res) => {
   res.json({ data: { message: 'Simple PUT endpoint working', received: req.body } });
 });
 
+// Test traveler profile endpoint without authentication
+app.put('/api/test-traveler-profile', (req, res) => {
+  console.log('🧪 Test traveler profile endpoint called');
+  console.log('📝 Raw request body:', JSON.stringify(req.body, null, 2));
+  console.log('📝 Request body type:', typeof req.body);
+  console.log('📝 Request body keys:', Object.keys(req.body || {}));
+  
+  const travelerProfile = req.body?.travelerProfile || req.body || {};
+  console.log('📝 Extracted traveler profile:', JSON.stringify(travelerProfile, null, 2));
+  
+  res.json({ 
+    data: { 
+      message: 'Test traveler profile endpoint working', 
+      received: req.body,
+      extracted: travelerProfile,
+      method: req.body?.travelerProfile ? 'req.body.travelerProfile' : 'req.body'
+    } 
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
@@ -711,9 +731,15 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
 
 app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   try {
+    console.log(`\n🔍 === TRAVELER PROFILE UPDATE DEBUG ===`);
+    console.log(`👤 User ID from token: ${req.userId}`);
+    console.log(`📝 Raw request body:`, JSON.stringify(req.body, null, 2));
+    console.log(`📝 Request body type:`, typeof req.body);
+    console.log(`📝 Request body keys:`, Object.keys(req.body || {}));
+    
     const incomingTravelerProfile = req.body?.travelerProfile || req.body || {};
-    console.log(`💾 Updating traveler profile for user: ${req.userId}`);
-    console.log(`📝 New profile data:`, JSON.stringify(incomingTravelerProfile, null, 2));
+    console.log(`📝 Extracted traveler profile:`, JSON.stringify(incomingTravelerProfile, null, 2));
+    console.log(`📝 Profile extraction method:`, req.body?.travelerProfile ? 'req.body.travelerProfile' : 'req.body');
     
     // Get user from database by ID
     const user = await dbService.getUserById(req.userId);
@@ -725,14 +751,15 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
 
     console.log(`✅ Found user: ${user.email}`);
     const previousProfile = user.traveler_profile || {};
-    console.log(`📝 Previous profile:`, JSON.stringify(previousProfile, null, 2));
+    console.log(`📝 Previous profile from DB:`, JSON.stringify(previousProfile, null, 2));
     
     // Merge with existing profile
     const mergedProfile = { ...previousProfile, ...incomingTravelerProfile };
+    console.log(`📝 Merged profile:`, JSON.stringify(mergedProfile, null, 2));
 
     // Persist to database
     console.log(`💾 Saving to database with email: ${user.email}`);
-    console.log(`💾 Update data:`, JSON.stringify({ travelerProfile: mergedProfile }, null, 2));
+    console.log(`💾 Update data structure:`, JSON.stringify({ travelerProfile: mergedProfile }, null, 2));
     
     const updateResult = await dbService.updateUser(user.email, { travelerProfile: mergedProfile });
     console.log(`✅ Database update result:`, updateResult);
@@ -743,7 +770,8 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     const savedProfile = refreshed?.traveler_profile || mergedProfile;
 
     console.log(`✅ Profile updated successfully`);
-    console.log(`📝 Saved profile:`, JSON.stringify(savedProfile, null, 2));
+    console.log(`📝 Final saved profile:`, JSON.stringify(savedProfile, null, 2));
+    console.log(`🔍 === END DEBUG ===\n`);
 
     res.json({ data: { travelerProfile: savedProfile } });
   } catch (error) {
