@@ -915,17 +915,17 @@ app.get('/api/check-nickname/:nickname', async (req, res) => {
     const existingUser = await dbService.getUserByNickname(nickname);
     
     if (existingUser) {
-      res.json({ 
+      res.json({ data: { 
         nickname: nickname,
         isAvailable: false, 
         message: 'Nickname already taken' 
-      });
+      } });
     } else {
-      res.json({ 
+      res.json({ data: { 
         nickname: nickname,
         isAvailable: true, 
         message: 'Nickname available' 
-      });
+      } });
     }
   } catch (error) {
     console.error('Check nickname error:', error);
@@ -946,9 +946,9 @@ app.get('/api/user/check-nickname/:nickname', authenticateUser, async (req, res)
     const existingUser = await dbService.getUserByNickname(nickname);
     
     if (existingUser && existingUser.id !== req.userId) {
-      res.json({ available: false, message: 'Nickname already taken' });
+      res.json({ data: { available: false, message: 'Nickname already taken' } });
     } else {
-      res.json({ available: true, message: 'Nickname available' });
+      res.json({ data: { available: true, message: 'Nickname available' } });
     }
   } catch (error) {
     console.error('Check nickname error:', error);
@@ -964,10 +964,10 @@ app.get('/api/user/llm-config', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ 
+    res.json({ data: { 
       llmConfig: user.llm_config,
       savedAgents: user.saved_agents 
-    });
+    } });
   } catch (error) {
     console.error('Get LLM config error:', error);
     res.status(500).json({ error: 'Failed to get LLM config' });
@@ -994,11 +994,11 @@ app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
 
     const updatedUser = await dbService.updateUser(user.email, updateData);
 
-    res.json({ 
+        res.json({ data: { 
       message: 'LLM config updated successfully',
       llmConfig: updatedUser.llm_config,
-      savedAgents: updatedUser.saved_agents 
-    });
+      savedAgents: updatedUser.saved_agents
+    } });
   } catch (error) {
     console.error('Update LLM config error:', error);
     res.status(500).json({ error: 'Failed to update LLM config' });
@@ -1203,8 +1203,9 @@ app.get('/api/posts', async (req, res) => {
     console.log(`📝 Returning ${enrichedPosts.length} posts`);
     const normalizedPosts = enrichedPosts.map(p => ({
       ...p,
-      connected_poi: p.connected_poi ?? p.connectedPOI ?? '',
-      created_at: p.created_at ?? null
+      // Map to camelCase for frontend consistency
+      connectedPOI: p.connected_poi ?? p.connectedPOI ?? '',
+      createdAt: p.created_at ?? null
     }));
     res.json({ data: { posts: normalizedPosts } });
   } catch (error) {
@@ -1453,8 +1454,9 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     console.log('📝 New post created:', savedPost);
     const responsePost = {
       ...savedPost,
-      connected_poi: savedPost.connected_poi ?? connectedPOINormalized,
-      created_at: savedPost.created_at ?? post.createdAt
+      // Map to camelCase for frontend consistency
+      connectedPOI: savedPost.connected_poi ?? connectedPOINormalized,
+      createdAt: savedPost.created_at ?? post.createdAt
     };
     res.status(201).json({ data: { post: responsePost } });
   } catch (error) {
@@ -1489,10 +1491,11 @@ app.get('/api/pois', async (req, res) => {
           email: poi.user_email || '',
           name: poi.user_name || poi.author || ''
         },
-        created_at: poi.created_at ?? null,
+        // Map to camelCase for frontend consistency
+        createdAt: poi.created_at ?? null,
         reviews: poi.reviews || [],
-        average_rating: poi.average_rating ?? 0,
-        review_count: poi.review_count ?? 0
+        averageRating: poi.average_rating ?? 0,
+        reviewCount: poi.review_count ?? 0
       };
     });
     
@@ -1572,10 +1575,11 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
       type: savedPoi.type ?? null,
       author: savedPoi.author ?? null,
       user: { id: savedPoi.user_id ?? null },
-      created_at: savedPoi.created_at ?? null,
+      // Map to camelCase for frontend consistency
+      createdAt: savedPoi.created_at ?? null,
       reviews: savedPoi.reviews || [],
-      average_rating: savedPoi.average_rating ?? 0,
-      review_count: savedPoi.review_count ?? 0
+      averageRating: savedPoi.average_rating ?? 0,
+      reviewCount: savedPoi.review_count ?? 0
     };
     
     console.log('📍 New POI added with ID:', savedPoiId);
@@ -2181,6 +2185,41 @@ app.post('/api/communities/:communityId/leave', authenticateUser, async (req, re
   } catch (error) {
     console.error('❌ Error leaving community:', error);
     res.status(500).json({ error: 'Failed to leave community' });
+  }
+});
+
+// Conversation endpoints (stubs)
+app.get('/api/conversations/:conversationId', authenticateUser, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    
+    // Stub implementation - return basic conversation structure
+    const conversation = {
+      id: conversationId,
+      participants: [req.userId],
+      lastMessage: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    res.json({ data: { conversation } });
+  } catch (error) {
+    console.error('Get conversation error:', error);
+    res.status(500).json({ error: 'Failed to get conversation' });
+  }
+});
+
+app.get('/api/conversations/:conversationId/messages', authenticateUser, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    
+    // Stub implementation - return empty messages array
+    const messages = [];
+    
+    res.json({ data: { messages } });
+  } catch (error) {
+    console.error('Get conversation messages error:', error);
+    res.status(500).json({ error: 'Failed to get conversation messages' });
   }
 });
 
