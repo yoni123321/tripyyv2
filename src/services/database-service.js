@@ -63,6 +63,18 @@ class DatabaseService {
     return parseInt(result.rows[0].count);
   }
 
+  async getUserTrips(userId) {
+    const query = 'SELECT * FROM trips WHERE user_id = $1 ORDER BY created_at DESC';
+    const result = await pool.query(query, [userId]);
+    return result.rows;
+  }
+
+  async getUserByNickname(nickname) {
+    const query = 'SELECT * FROM users WHERE traveler_profile->>\'nickname\' = $1';
+    const result = await pool.query(query, [nickname]);
+    return result.rows[0];
+  }
+
   async updateUser(email, updates) {
     // Build dynamic update query based on what's provided
     const updateFields = [];

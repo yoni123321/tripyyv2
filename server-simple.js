@@ -812,6 +812,98 @@ app.get('/api/user/friends', authenticateUser, async (req, res) => {
   }
 });
 
+// User traveler profile endpoint
+app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
+  try {
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Parse the traveler profile from JSONB
+    const travelerProfile = user.traveler_profile || {};
+    
+    res.json({
+      name: user.name,
+      nickname: travelerProfile.nickname || '',
+      birthday: travelerProfile.birthday || null,
+      photo: travelerProfile.photo || null,
+      age: travelerProfile.age || 0,
+      interests: travelerProfile.interests || [],
+      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
+      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+      numberOfTravelers: travelerProfile.numberOfTravelers || 0
+    });
+  } catch (error) {
+    console.error('Get traveler profile error:', error);
+    res.status(500).json({ error: 'Failed to get traveler profile' });
+  }
+});
+
+// Update traveler profile endpoint
+app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
+  try {
+    const { name, nickname, birthday, photo, age, interests, dietaryRestrictions, accessibilityNeeds, numberOfTravelers } = req.body;
+    
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update the traveler profile
+    const updatedProfile = {
+      ...user.traveler_profile,
+      name: name || user.traveler_profile?.name,
+      nickname: nickname || user.traveler_profile?.nickname,
+      birthday: birthday || user.traveler_profile?.birthday,
+      photo: photo || user.traveler_profile?.photo,
+      age: age || user.traveler_profile?.age,
+      interests: interests || user.traveler_profile?.interests,
+      dietaryRestrictions: dietaryRestrictions || user.traveler_profile?.dietaryRestrictions,
+      accessibilityNeeds: accessibilityNeeds || user.traveler_profile?.accessibilityNeeds,
+      numberOfTravelers: numberOfTravelers || user.traveler_profile?.numberOfTravelers
+    };
+
+    // Update user in database
+    const updateData = {
+      travelerProfile: updatedProfile
+    };
+
+    const updatedUser = await dbService.updateUser(user.email, updateData);
+
+    res.json({
+      message: 'Traveler profile updated successfully',
+      profile: updatedProfile
+    });
+  } catch (error) {
+    console.error('Update traveler profile error:', error);
+    res.status(500).json({ error: 'Failed to update traveler profile' });
+  }
+});
+
+// Check nickname availability endpoint
+app.get('/api/user/check-nickname/:nickname', authenticateUser, async (req, res) => {
+  try {
+    const { nickname } = req.params;
+    
+    if (!nickname) {
+      return res.status(400).json({ error: 'Nickname is required' });
+    }
+
+    // Check if nickname exists (excluding current user)
+    const existingUser = await dbService.getUserByNickname(nickname);
+    
+    if (existingUser && existingUser.id !== req.userId) {
+      res.json({ available: false, message: 'Nickname already taken' });
+    } else {
+      res.json({ available: true, message: 'Nickname available' });
+    }
+  } catch (error) {
+    console.error('Check nickname error:', error);
+    res.status(500).json({ error: 'Failed to check nickname availability' });
+  }
+});
+
 // LLM config endpoints
 app.get('/api/user/llm-config', authenticateUser, async (req, res) => {
   try {
