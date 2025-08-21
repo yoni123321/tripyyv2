@@ -1038,12 +1038,15 @@ app.get('/api/communities', async (req, res) => {
   }
 });
 
-// Simple search endpoint for users and communities
+// Enhanced search endpoint for users and communities
 app.get('/api/search', authenticateUser, async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
+    console.log(`🔍 Search query: "${q}"`);
+    
     if (!q || q.length < 2) {
-      return res.json({ data: { results: { users: [], communities: [] } } });
+      console.log(`⚠️ Search query too short: "${q}"`);
+      return res.json({ data: { users: [], communities: [] } });
     }
 
     // Search users and communities using database service
@@ -1052,25 +1055,46 @@ app.get('/api/search', authenticateUser, async (req, res) => {
       dbService.searchCommunities(q)
     ]);
 
-    // Format user results
-    const formattedUsers = matchedUsers.map(user => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      nickname: user.traveler_profile?.nickname || user.name,
-      travelerProfile: user.traveler_profile,
-      photo: user.traveler_profile?.photo || null,
-    }));
+    console.log(`🔍 Found ${matchedUsers.length} users and ${matchedCommunities.length} communities`);
+
+    // Format user results with complete travelerProfile data
+    const formattedUsers = matchedUsers.map(user => {
+      const travelerProfile = user.traveler_profile || {};
+      return {
+        id: user.id,
+        name: travelerProfile.name || user.name || 'Unknown User',
+        email: user.email,
+        nickname: travelerProfile.nickname || user.name || 'Unknown User',
+        photo: travelerProfile.photo || null,
+        travelerProfile: {
+          name: travelerProfile.name || user.name || '',
+          nickname: travelerProfile.nickname || '',
+          birthday: travelerProfile.birthday || null,
+          photo: travelerProfile.photo || null,
+          age: travelerProfile.age || 0,
+          interests: travelerProfile.interests || [],
+          dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
+          accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+          numberOfTravelers: travelerProfile.numberOfTravelers || 0
+        }
+      };
+    });
 
     // Format community results
     const formattedCommunities = matchedCommunities.map(community => ({
-      ...community,
+      id: community.id,
+      name: community.name,
+      description: community.description,
+      createdBy: community.created_by,
+      members: community.members || [],
       memberCount: community.members ? community.members.length : 0,
+      createdAt: community.created_at
     }));
 
-    res.json({ data: { results: { users: formattedUsers, communities: formattedCommunities } } });
+    console.log(`✅ Search completed successfully`);
+    res.json({ data: { users: formattedUsers, communities: formattedCommunities } });
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('❌ Search error:', error);
     res.status(500).json({ error: 'Failed to search' });
   }
 });
@@ -1153,7 +1177,7 @@ app.get('/api/posts', async (req, res) => {
     // Get all posts from database
     const posts = await dbService.getAllPosts();
     
-    // Enrich posts with user details
+    // Enrich posts with complete user details
     const enrichedPosts = await Promise.all(posts.map(async (post) => {
       const user = await dbService.getUserById(post.user_id);
       
@@ -1165,7 +1189,7 @@ app.get('/api/posts', async (req, res) => {
             const commentUser = await dbService.getUserById(comment.userId);
             return {
               ...comment,
-              userName: commentUser?.name || comment.userNickname || 'Anonymous',
+              userName: commentUser?.traveler_profile?.name || commentUser?.name || comment.userNickname || 'Anonymous',
               userNickname: commentUser?.traveler_profile?.nickname || comment.userNickname,
               userPhoto: commentUser?.traveler_profile?.photo || comment.userPhoto,
               likes: Array.isArray(comment.likes) ? comment.likes : [],
@@ -1175,25 +1199,34 @@ app.get('/api/posts', async (req, res) => {
         }));
       }
       
+      // Ensure complete author information from travelerProfile
+      const authorInfo = user ? {
+        id: user.id,
+        name: user.traveler_profile?.name || user.name || 'Unknown User',
+        nickname: user.traveler_profile?.nickname || user.name || 'Unknown User',
+        photo: user.traveler_profile?.photo || null,
+        email: user.email
+      } : {
+        id: 'unknown',
+        name: 'Unknown User',
+        nickname: 'Unknown User',
+        photo: null,
+        email: null
+      };
+      
       return {
         ...post,
         comments: enrichedComments,
         commentCount: enrichedComments.length,
         likeCount: post.like_count || 0,
-        author: user ? {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          nickname: user.traveler_profile?.nickname || user.name,
-          photo: user.traveler_profile?.photo || null
-        } : null
+        author: authorInfo
       };
     }));
 
     // Sort by creation date (newest first)
     enrichedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
-    console.log(`📝 Returning ${enrichedPosts.length} posts`);
+    console.log(`📝 Returning ${enrichedPosts.length} posts with enriched author data`);
     const normalizedPosts = enrichedPosts.map(p => ({
       ...p,
       // Map to camelCase for frontend consistency
@@ -2048,10 +2081,11 @@ app.post('/api/communities/:communityId/join', authenticateUser, async (req, res
   }
 });
 
-// User profile endpoint
+// User profile endpoint - enhanced with complete travelerProfile data
 app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log(`👤 Getting profile for user/nickname: ${userId}`);
     
     // Try by ID first
     let user = await dbService.getUserById(userId);
@@ -2059,26 +2093,50 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
     // If not found, try by nickname (strip leading @ if provided)
     if (!user) {
       const nickname = (userId || '').toString().replace(/^@/, '');
+      console.log(`🔍 User not found by ID, trying nickname: ${nickname}`);
+      
       // Search for user by nickname in database
       const allUsers = await dbService.searchUsers(nickname);
       user = allUsers.find(u => (u.traveler_profile?.nickname || '').toLowerCase() === nickname.toLowerCase());
+      
+      if (user) {
+        console.log(`✅ Found user by nickname: ${user.email}`);
+      }
     }
     
     if (!user) {
+      console.log(`❌ User not found: ${userId}`);
       return res.status(404).json({ error: 'User not found' });
     }
     
-    // Return user profile data (excluding sensitive information)
+    // Ensure complete travelerProfile data with defaults
+    const travelerProfile = user.traveler_profile || {};
+    const completeProfile = {
+      name: travelerProfile.name || user.name || '',
+      nickname: travelerProfile.nickname || '',
+      birthday: travelerProfile.birthday || null,
+      photo: travelerProfile.photo || null,
+      age: travelerProfile.age || 0,
+      interests: travelerProfile.interests || [],
+      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
+      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+      numberOfTravelers: travelerProfile.numberOfTravelers || 0,
+      // Include any other fields from traveler_profile
+      ...travelerProfile
+    };
+    
+    // Return complete user profile data
     const profileData = {
       id: user.id,
       name: user.name,
-      nickname: user.traveler_profile?.nickname,
       email: user.email,
-      photo: user.traveler_profile?.photo,
-      travelerProfile: user.traveler_profile,
-      createdAt: user.created_at
+      photo: completeProfile.photo,
+      travelerProfile: completeProfile,
+      createdAt: user.created_at,
+      lastKnownLocation: user.last_known_location
     };
     
+    console.log(`📝 Returning complete profile for user: ${user.email}`);
     res.json({ data: { user: profileData } });
   } catch (error) {
     console.error('❌ Error getting user profile:', error);
@@ -2110,31 +2168,7 @@ app.get('/api/user/trips/:userId', authenticateUser, async (req, res) => {
   }
 });
 
-// User profile endpoint (frontend compatible)
-app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const user = await dbService.getUserById(userId);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Return user profile data
-    res.json({ data: { user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      nickname: user.traveler_profile?.nickname || user.name,
-      travelerProfile: user.traveler_profile,
-      photo: user.traveler_profile?.photo || null,
-      lastKnownLocation: user.last_known_location
-    } } });
-  } catch (error) {
-    console.error('Get user profile error:', error);
-    res.status(500).json({ error: 'Failed to get user profile' });
-  }
-});
+// Removed duplicate user profile endpoint - using the enhanced version above
 
 // Community leave endpoint
 app.post('/api/communities/:communityId/leave', authenticateUser, async (req, res) => {
