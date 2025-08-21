@@ -70,7 +70,13 @@ class DatabaseService {
   }
 
   async getUserByNickname(nickname) {
-    const query = 'SELECT * FROM users WHERE traveler_profile->>\'nickname\' = $1';
+    // Check if nickname exists in traveler_profile, and also check if it's not empty
+    const query = `
+      SELECT * FROM users 
+      WHERE traveler_profile->>'nickname' = $1 
+      AND traveler_profile->>'nickname' IS NOT NULL 
+      AND traveler_profile->>'nickname' != ''
+    `;
     const result = await pool.query(query, [nickname]);
     return result.rows[0];
   }
@@ -88,6 +94,9 @@ class DatabaseService {
   }
 
   async updateUser(email, updates) {
+    console.log(`🔄 updateUser called with email: ${email}`);
+    console.log(`🔄 Updates:`, JSON.stringify(updates, null, 2));
+    
     // Build dynamic update query based on what's provided
     const updateFields = [];
     const values = [];
@@ -112,6 +121,7 @@ class DatabaseService {
     if (updates.travelerProfile !== undefined) {
       updateFields.push(`traveler_profile = $${valueIndex++}`);
       values.push(JSON.stringify(updates.travelerProfile));
+      console.log(`🔄 Setting traveler_profile to:`, JSON.stringify(updates.travelerProfile));
     }
     if (updates.llmConfig !== undefined) {
       updateFields.push(`llm_config = $${valueIndex++}`);
@@ -135,7 +145,11 @@ class DatabaseService {
       RETURNING *
     `;
     
+    console.log(`🔄 SQL Query:`, query);
+    console.log(`🔄 Values:`, values);
+    
     const result = await pool.query(query, values);
+    console.log(`🔄 Update result:`, result.rows[0]);
     return result.rows[0];
   }
 

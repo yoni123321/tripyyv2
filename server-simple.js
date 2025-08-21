@@ -714,10 +714,15 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     const mergedProfile = { ...previousProfile, ...incomingTravelerProfile };
 
     // Persist to database
-    await dbService.updateUser(user.email, { travelerProfile: mergedProfile });
+    console.log(`💾 Saving to database with email: ${user.email}`);
+    console.log(`💾 Update data:`, JSON.stringify({ travelerProfile: mergedProfile }, null, 2));
+    
+    const updateResult = await dbService.updateUser(user.email, { travelerProfile: mergedProfile });
+    console.log(`✅ Database update result:`, updateResult);
 
     // Reload fresh user from DB to ensure we return the saved state
     const refreshed = await dbService.getUserById(req.userId);
+    console.log(`🔄 Reloaded user from DB:`, JSON.stringify(refreshed?.traveler_profile, null, 2));
     const savedProfile = refreshed?.traveler_profile || mergedProfile;
 
     console.log(`✅ Profile updated successfully`);
