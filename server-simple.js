@@ -1447,7 +1447,32 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
 app.get('/api/pois', async (req, res) => {
   try {
     const pois = await dbService.getAllPOIs();
-    res.json({ pois });
+    
+    // Transform POI data to match frontend expectations
+    const transformedPois = pois.map(poi => ({
+      id: poi.id,
+      name: poi.name,
+      description: poi.description,
+      coordinates: poi.location, // Map location back to coordinates for frontend
+      photo: poi.photos && Array.isArray(poi.photos) && poi.photos.length > 0 ? poi.photos[0] : null, // Map photos array to single photo
+      icon: poi.icon,
+      type: poi.type,
+      author: poi.author,
+      user: {
+        id: poi.user_id,
+        email: poi.user_email || '',
+        name: poi.user_name || poi.author || ''
+      },
+      createdAt: poi.created_at,
+      reviews: poi.reviews || [],
+      averageRating: poi.average_rating || 0,
+      reviewCount: poi.review_count || 0
+    }));
+    
+    console.log(`📍 Returning ${transformedPois.length} POIs with transformed data structure`);
+    console.log('📍 Sample POI data:', transformedPois[0]);
+    
+    res.json({ pois: transformedPois });
   } catch (error) {
     console.error('Get POIs error:', error);
     res.status(500).json({ error: 'Failed to get POIs' });
@@ -1466,23 +1491,31 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Map frontend data structure to backend database structure
     const poi = {
       name,
-      coordinates,
-      user: { id: user.id, email: user.email, name: user.name },
-      createdAt: new Date().toISOString(),
-      review: review || '',
+      location: coordinates, // Map coordinates to location
+      photos: photo ? [photo] : [], // Map single photo to photos array
       icon: icon || '',
-      description: description || '',
-      photo: photo || '',
       type: type || 'public',
       author: author || user.traveler_profile?.nickname || user.name || '',
+      userId: user.id, // Add userId for database
+      reviews: [],
+      averageRating: 0,
+      reviewCount: 0,
+      createdAt: new Date().toISOString(),
+      description: description || ''
     };
 
+    console.log('📍 Creating POI with data:', poi);
+
     // Store POI in database
-    const savedPoi = await dbService.createPOI(poi);
+    const savedPoiId = await dbService.createPOI(poi);
     
-    console.log('📍 New POI added:', savedPoi);
+    // Get the created POI to return
+    const savedPoi = await dbService.getPOIById(savedPoiId);
+    
+    console.log('📍 New POI added with ID:', savedPoiId);
     res.status(201).json({ message: 'POI added', poi: savedPoi });
   } catch (error) {
     console.error('❌ Error adding POI:', error);

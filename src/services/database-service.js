@@ -301,6 +301,12 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async getPOIById(id) {
+    const query = 'SELECT * FROM pois WHERE id = $1';
+    const result = await pool.query(query, [id]);
+    return result.rows[0];
+  }
+
   async updatePOI(poiId, updates) {
     const updateFields = [];
     const values = [];
