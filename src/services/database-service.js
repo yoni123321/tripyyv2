@@ -454,6 +454,33 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async deletePost(postId) {
+    const query = 'DELETE FROM posts WHERE id = $1 RETURNING *';
+    const result = await pool.query(query, [postId]);
+    return result.rows[0];
+  }
+
+  async deletePostsOlderThan(hours) {
+    const query = `
+      DELETE FROM posts 
+      WHERE created_at < NOW() - INTERVAL '${hours} hours'
+      RETURNING id, created_at
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
+  async getPostsOlderThan(hours) {
+    const query = `
+      SELECT id, created_at, content 
+      FROM posts 
+      WHERE created_at < NOW() - INTERVAL '${hours} hours'
+      ORDER BY created_at ASC
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
   // Community operations
   async createCommunity(communityData) {
     const query = `

@@ -35,6 +35,9 @@ async function initializeServer() {
     await initDatabase();
     console.log('✅ Database initialized successfully');
     
+    // Schedule post cleanup
+    schedulePostCleanup();
+    
     // Start server
     startServer();
   } catch (error) {
@@ -45,6 +48,43 @@ async function initializeServer() {
 }
 
 // Database operations are now handled by dbService
+
+// Helper function to delete posts older than 24 hours
+async function cleanupOldPosts() {
+  try {
+    console.log('🧹 Starting cleanup of posts older than 24 hours...');
+    
+    // First, get posts that will be deleted (for logging)
+    const oldPosts = await dbService.getPostsOlderThan(24);
+    console.log(`📊 Found ${oldPosts.length} posts older than 24 hours`);
+    
+    if (oldPosts.length > 0) {
+      console.log('🗑️ Posts to be deleted:');
+      oldPosts.forEach(post => {
+        console.log(`   - ID: ${post.id}, Created: ${post.created_at}, Content: ${post.content?.substring(0, 50)}...`);
+      });
+      
+      // Delete the old posts
+      const deletedPosts = await dbService.deletePostsOlderThan(24);
+      console.log(`✅ Successfully deleted ${deletedPosts.length} posts older than 24 hours`);
+    } else {
+      console.log('✨ No posts older than 24 hours found');
+    }
+  } catch (error) {
+    console.error('❌ Error during post cleanup:', error);
+  }
+}
+
+// Schedule post cleanup to run every hour
+function schedulePostCleanup() {
+  // Run cleanup immediately on startup
+  cleanupOldPosts();
+  
+  // Then schedule to run every hour
+  setInterval(cleanupOldPosts, 60 * 60 * 1000); // 60 minutes * 60 seconds * 1000 milliseconds
+  
+  console.log('⏰ Post cleanup scheduled to run every hour');
+}
 
 // Initialize server with database
 initializeServer().catch(error => {
@@ -193,6 +233,55 @@ app.get('/api/health', async (req, res) => {
       message: 'Health check failed',
       error: error.message
     });
+  }
+});
+
+// Manual post cleanup endpoint (for testing and admin use)
+app.post('/api/admin/cleanup-posts', authenticateUser, async (req, res) => {
+  try {
+    console.log('🧹 Manual post cleanup requested by user:', req.userId);
+    
+    // Check if user is admin (you can add more sophisticated admin checks here)
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // For now, allow any authenticated user to trigger cleanup
+    // In production, you might want to restrict this to admin users only
+    
+    // Get posts that will be deleted
+    const oldPosts = await dbService.getPostsOlderThan(24);
+    console.log(`📊 Found ${oldPosts.length} posts older than 24 hours`);
+    
+    if (oldPosts.length === 0) {
+      return res.json({ 
+        data: { 
+          message: 'No posts older than 24 hours found',
+          deletedCount: 0,
+          oldPosts: []
+        } 
+      });
+    }
+    
+    // Delete the old posts
+    const deletedPosts = await dbService.deletePostsOlderThan(24);
+    
+    console.log(`✅ Manual cleanup completed: ${deletedPosts.length} posts deleted`);
+    
+    res.json({ 
+      data: { 
+        message: `Successfully deleted ${deletedPosts.length} posts older than 24 hours`,
+        deletedCount: deletedPosts.length,
+        deletedPosts: deletedPosts.map(p => ({
+          id: p.id,
+          created_at: p.created_at
+        }))
+      } 
+    });
+  } catch (error) {
+    console.error('❌ Manual cleanup error:', error);
+    res.status(500).json({ error: 'Failed to cleanup posts' });
   }
 });
 
