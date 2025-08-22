@@ -93,6 +93,7 @@ const initDatabase = async () => {
         user_id INTEGER REFERENCES users(id),
         name VARCHAR(255) NOT NULL,
         destination VARCHAR(255),
+        summary TEXT,
         start_date DATE,
         end_date DATE,
         itinerary JSONB DEFAULT '{}',
@@ -104,6 +105,8 @@ const initDatabase = async () => {
         is_public BOOLEAN DEFAULT FALSE,
         share_type VARCHAR(50) DEFAULT 'private',
         share_id VARCHAR(255) UNIQUE,
+        local_trip_id VARCHAR(255),
+        owner_id INTEGER REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

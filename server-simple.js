@@ -1102,6 +1102,71 @@ app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
   }
 });
 
+// Create trip in users table trips column
+app.post('/api/user/trips', authenticateUser, async (req, res) => {
+  try {
+    const { name, destination, summary, is_public, share_type, start_date, end_date, local_trip_id, owner_id, budget, itinerary, tips, suggestions, traveler_profile } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Trip name is required' });
+    }
+    
+    console.log(`🔄 Creating trip "${name}" for user ${req.userId}`);
+    console.log(`📝 Trip data:`, JSON.stringify(req.body, null, 2));
+    
+    // Get current user to access existing trips
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Prepare new trip data
+    const newTrip = {
+      id: `trip_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      destination: destination || '',
+      summary: summary || '',
+      is_public: is_public || false,
+      share_type: share_type || 'private',
+      start_date: start_date || null,
+      end_date: end_date || null,
+      local_trip_id: local_trip_id || null,
+      owner_id: owner_id || req.userId,
+      budget: budget || { total: 0, spent: 0, currency: 'USD' },
+      itinerary: itinerary || [],
+      tips: tips || [],
+      suggestions: suggestions || [],
+      traveler_profile: traveler_profile || {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Get existing trips and add new trip
+    const existingTrips = user.trips || [];
+    const updatedTrips = [...existingTrips, newTrip];
+    
+    console.log(`📊 User currently has ${existingTrips.length} trips, adding new trip`);
+    
+    // Update user's trips column in database
+    const updatedUser = await dbService.updateUser(user.email, { trips: updatedTrips });
+    
+    console.log(`✅ Trip "${name}" saved successfully to user's trips column`);
+    console.log(`📊 User now has ${updatedTrips.length} trips`);
+    
+    res.status(201).json({ 
+      data: { 
+        trip: newTrip,
+        message: 'Trip saved successfully',
+        totalTrips: updatedTrips.length
+      } 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating trip:', error);
+    res.status(500).json({ error: 'Failed to create trip' });
+  }
+});
+
 // Communities endpoints
 app.get('/api/communities', async (req, res) => {
   try {

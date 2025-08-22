@@ -183,10 +183,59 @@ class DatabaseService {
     return result.rows[0].id;
   }
 
+  async createUserTrip(tripData) {
+    const query = `
+      INSERT INTO trips (
+        user_id, name, destination, summary, is_public, share_type, 
+        start_date, end_date, local_trip_id, owner_id, budget, 
+        itinerary, tips, suggestions, traveler_profile, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
+      RETURNING *
+    `;
+    
+    const values = [
+      tripData.userId,
+      tripData.name,
+      tripData.destination || '',
+      tripData.summary || '',
+      tripData.is_public || false,
+      tripData.share_type || 'private',
+      tripData.start_date || null,
+      tripData.end_date || null,
+      tripData.local_trip_id || null,
+      tripData.owner_id || tripData.userId,
+      JSON.stringify(tripData.budget || { total: 0, spent: 0, currency: 'USD' }),
+      JSON.stringify(tripData.itinerary || []),
+      JSON.stringify(tripData.tips || []),
+      JSON.stringify(tripData.suggestions || []),
+      JSON.stringify(tripData.traveler_profile || {}),
+      new Date(),
+      new Date()
+    ];
+    
+    console.log(`🔄 Creating user trip with data:`, JSON.stringify(tripData, null, 2));
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
   async getUserTrips(userId) {
-    const query = 'SELECT * FROM trips WHERE user_id = $1 ORDER BY updated_at DESC';
+    // Get trips from user's trips column (JSONB array)
+    const query = 'SELECT trips FROM users WHERE id = $1';
     const result = await pool.query(query, [userId]);
-    return result.rows;
+    
+    if (result.rows.length === 0) {
+      return [];
+    }
+    
+    const userTrips = result.rows[0].trips || [];
+    
+    // Sort trips by updated_at (newest first)
+    return userTrips.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0);
+      const dateB = new Date(b.updated_at || b.created_at || 0);
+      return dateB - dateA;
+    });
   }
 
   async getTripById(tripId) {
@@ -274,6 +323,54 @@ class DatabaseService {
     const query = 'DELETE FROM trips WHERE id = $1 RETURNING *';
     const result = await pool.query(query, [tripId]);
     return result.rows[0];
+  }
+
+  async updateUserTrip(userId, tripId, updates) {
+    // Get current user trips
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const trips = user.trips || [];
+    const tripIndex = trips.findIndex(trip => trip.id === tripId);
+    
+    if (tripIndex === -1) {
+      throw new Error('Trip not found');
+    }
+    
+    // Update the trip
+    trips[tripIndex] = {
+      ...trips[tripIndex],
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    
+    // Update user's trips column
+    const updatedUser = await this.updateUser(user.email, { trips });
+    return trips[tripIndex];
+  }
+
+  async deleteUserTrip(userId, tripId) {
+    // Get current user trips
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const trips = user.trips || [];
+    const tripIndex = trips.findIndex(trip => trip.id === tripId);
+    
+    if (tripIndex === -1) {
+      throw new Error('Trip not found');
+    }
+    
+    // Remove the trip
+    const deletedTrip = trips.splice(tripIndex, 1)[0];
+    
+    // Update user's trips column
+    await this.updateUser(user.email, { trips });
+    return deletedTrip;
   }
 
   // POI operations
