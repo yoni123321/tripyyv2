@@ -326,9 +326,13 @@ class DatabaseService {
   }
 
   async updateUserTrip(userId, tripId, updates) {
+    console.log(`🔄 Database: Updating trip ${tripId} for user ${userId}`);
+    console.log(`📝 Database: Update data:`, JSON.stringify(updates, null, 2));
+    
     // Get current user trips
     const user = await this.getUserById(userId);
     if (!user) {
+      console.log(`❌ Database: User not found: ${userId}`);
       throw new Error('User not found');
     }
     
@@ -336,18 +340,35 @@ class DatabaseService {
     const tripIndex = trips.findIndex(trip => trip.id === tripId);
     
     if (tripIndex === -1) {
+      console.log(`❌ Database: Trip ${tripId} not found in user's trips`);
       throw new Error('Trip not found');
+    }
+    
+    const originalTrip = trips[tripIndex];
+    console.log(`✅ Database: Found trip "${originalTrip.name}" at index ${tripIndex}`);
+    console.log(`📊 Database: Original trip data:`, JSON.stringify(originalTrip, null, 2));
+    
+    // Handle shareType field mapping (frontend sends shareType, we store as share_type)
+    const processedUpdates = { ...updates };
+    if (updates.shareType !== undefined) {
+      processedUpdates.share_type = updates.shareType;
+      delete processedUpdates.shareType;
+      console.log(`🔄 Database: Mapped shareType "${updates.shareType}" to share_type "${processedUpdates.share_type}"`);
     }
     
     // Update the trip
     trips[tripIndex] = {
-      ...trips[tripIndex],
-      ...updates,
+      ...originalTrip,
+      ...processedUpdates,
       updated_at: new Date().toISOString()
     };
     
+    console.log(`📝 Database: Updated trip data:`, JSON.stringify(trips[tripIndex], null, 2));
+    
     // Update user's trips column
     const updatedUser = await this.updateUser(user.email, { trips });
+    console.log(`✅ Database: User updated successfully, trips column now has ${updatedUser.trips?.length || 0} trips`);
+    
     return trips[tripIndex];
   }
 

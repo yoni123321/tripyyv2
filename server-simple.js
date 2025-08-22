@@ -1265,6 +1265,50 @@ app.delete('/api/user/trips/:tripId', authenticateUser, async (req, res) => {
   }
 });
 
+// Test endpoint to verify share type updates
+app.put('/api/test-share-type/:tripId', authenticateUser, async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const { shareType } = req.body;
+    
+    console.log(`🧪 Testing share type update for trip ${tripId}`);
+    console.log(`📝 Share type to set: ${shareType}`);
+    
+    // Get current user and trip
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const currentTrip = user.trips?.find(trip => trip.id === tripId);
+    if (!currentTrip) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+    
+    console.log(`📊 Current trip share type: ${currentTrip.share_type || 'undefined'}`);
+    
+    // Update only the share type
+    const updatedTrip = await dbService.updateUserTrip(req.userId, tripId, { shareType });
+    
+    console.log(`✅ Trip updated successfully`);
+    console.log(`📊 New share type: ${updatedTrip.share_type}`);
+    
+    res.json({ 
+      data: { 
+        message: 'Share type test successful',
+        tripId,
+        oldShareType: currentTrip.share_type || 'undefined',
+        newShareType: updatedTrip.share_type,
+        trip: updatedTrip
+      } 
+    });
+    
+  } catch (error) {
+    console.error('❌ Share type test error:', error);
+    res.status(500).json({ error: 'Share type test failed' });
+  }
+});
+
 // Communities endpoints
 app.get('/api/communities', async (req, res) => {
   try {
