@@ -11,6 +11,7 @@
     "seed": "node seed-data.js",
     "migrate-railway": "node migrate-to-railway.js",
     "test-endpoints": "node test-endpoints.js",
+    "migrate-interests": "node migrate-interests.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

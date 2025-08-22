@@ -689,7 +689,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
   }
 });
 
-// User profile endpoints
+// User profile endpoints - enhanced with proper interests handling
 app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
   try {
     console.log(`👤 Getting traveler profile for user: ${req.userId}`);
@@ -705,21 +705,24 @@ app.get('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     const travelerProfile = user.traveler_profile || {};
     
     // Ensure all personal information fields are present with defaults
+    // Explicitly handle interests field to prevent it from being empty
     const merged = {
-      name: user.name || '',
+      name: travelerProfile.name || user.name || '',
       nickname: travelerProfile.nickname || '',
       birthday: travelerProfile.birthday || null,
       photo: (travelerProfile && travelerProfile.photo) || user.photo || null,
       age: travelerProfile.age || 0,
-      interests: travelerProfile.interests || [],
-      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
-      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+      // Ensure interests field is properly populated (not from activities)
+      interests: Array.isArray(travelerProfile.interests) ? travelerProfile.interests : [],
+      dietaryRestrictions: Array.isArray(travelerProfile.dietaryRestrictions) ? travelerProfile.dietaryRestrictions : [],
+      accessibilityNeeds: Array.isArray(travelerProfile.accessibilityNeeds) ? travelerProfile.accessibilityNeeds : [],
       numberOfTravelers: travelerProfile.numberOfTravelers || 0,
       // Include any other fields from traveler_profile
       ...travelerProfile
     };
     
-    console.log(`📝 Current profile:`, JSON.stringify(merged, null, 2));
+    console.log(`📝 Current profile with interests:`, JSON.stringify(merged, null, 2));
+    console.log(`🎯 Interests field:`, JSON.stringify(merged.interests, null, 2));
     
     // Return a stable shape used by the app, wrapped in data format
     res.json({ data: { travelerProfile: merged } });
@@ -753,8 +756,20 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     const previousProfile = user.traveler_profile || {};
     console.log(`📝 Previous profile from DB:`, JSON.stringify(previousProfile, null, 2));
     
+    // Ensure interests field is properly handled (not stored under activities)
+    const processedProfile = {
+      ...incomingTravelerProfile,
+      // Explicitly ensure interests field is preserved
+      interests: incomingTravelerProfile.interests || previousProfile.interests || [],
+      // Ensure other fields are also properly handled
+      dietaryRestrictions: incomingTravelerProfile.dietaryRestrictions || previousProfile.dietaryRestrictions || [],
+      accessibilityNeeds: incomingTravelerProfile.accessibilityNeeds || previousProfile.accessibilityNeeds || [],
+      numberOfTravelers: incomingTravelerProfile.numberOfTravelers || previousProfile.numberOfTravelers || 0
+    };
+    
     // Merge with existing profile
-    const mergedProfile = { ...previousProfile, ...incomingTravelerProfile };
+    const mergedProfile = { ...previousProfile, ...processedProfile };
+    console.log(`📝 Processed profile:`, JSON.stringify(processedProfile, null, 2));
     console.log(`📝 Merged profile:`, JSON.stringify(mergedProfile, null, 2));
 
     // Persist to database
@@ -1072,13 +1087,20 @@ app.get('/api/search', authenticateUser, async (req, res) => {
           birthday: travelerProfile.birthday || null,
           photo: travelerProfile.photo || null,
           age: travelerProfile.age || 0,
-          interests: travelerProfile.interests || [],
-          dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
-          accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+          // Ensure interests field is properly populated (not from activities)
+          interests: Array.isArray(travelerProfile.interests) ? travelerProfile.interests : [],
+          dietaryRestrictions: Array.isArray(travelerProfile.dietaryRestrictions) ? travelerProfile.dietaryRestrictions : [],
+          accessibilityNeeds: Array.isArray(travelerProfile.accessibilityNeeds) ? travelerProfile.accessibilityNeeds : [],
           numberOfTravelers: travelerProfile.numberOfTravelers || 0
         }
       };
     });
+    
+    console.log(`🎯 Search results - Users with interests:`, formattedUsers.map(u => ({
+      name: u.name,
+      nickname: u.nickname,
+      interests: u.travelerProfile.interests
+    })));
 
     // Format community results
     const formattedCommunities = matchedCommunities.map(community => ({
@@ -1213,6 +1235,8 @@ app.get('/api/posts', async (req, res) => {
         photo: null,
         email: null
       };
+      
+      console.log(`🎯 Post author info:`, JSON.stringify(authorInfo, null, 2));
       
       return {
         ...post,
@@ -2117,13 +2141,16 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
       birthday: travelerProfile.birthday || null,
       photo: travelerProfile.photo || null,
       age: travelerProfile.age || 0,
-      interests: travelerProfile.interests || [],
-      dietaryRestrictions: travelerProfile.dietaryRestrictions || [],
-      accessibilityNeeds: travelerProfile.accessibilityNeeds || [],
+      // Ensure interests field is properly populated (not from activities)
+      interests: Array.isArray(travelerProfile.interests) ? travelerProfile.interests : [],
+      dietaryRestrictions: Array.isArray(travelerProfile.dietaryRestrictions) ? travelerProfile.dietaryRestrictions : [],
+      accessibilityNeeds: Array.isArray(travelerProfile.accessibilityNeeds) ? travelerProfile.accessibilityNeeds : [],
       numberOfTravelers: travelerProfile.numberOfTravelers || 0,
       // Include any other fields from traveler_profile
       ...travelerProfile
     };
+    
+    console.log(`🎯 Complete profile interests:`, JSON.stringify(completeProfile.interests, null, 2));
     
     // Return complete user profile data
     const profileData = {
