@@ -1105,7 +1105,7 @@ app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
 // Create trip in users table trips column
 app.post('/api/user/trips', authenticateUser, async (req, res) => {
   try {
-    const { name, destination, summary, is_public, share_type, start_date, end_date, local_trip_id, owner_id, budget, itinerary, tips, suggestions, traveler_profile } = req.body;
+    const { name, destination, summary, share_type, start_date, end_date, local_trip_id, owner_id, budget, itinerary, tips, suggestions, traveler_profile } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Trip name is required' });
@@ -1126,7 +1126,6 @@ app.post('/api/user/trips', authenticateUser, async (req, res) => {
       name,
       destination: destination || '',
       summary: summary || '',
-      is_public: is_public || false,
       share_type: share_type || 'private',
       start_date: start_date || null,
       end_date: end_date || null,
@@ -1581,7 +1580,7 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
       budget,
       tips,
       suggestions,
-      is_public: isPublic,
+
       share_type: shareType,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1603,7 +1602,6 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
       summary: req.body.summary,
       createdAt: savedTrip.created_at,
       updatedAt: savedTrip.updated_at,
-      isPublic: savedTrip.is_public,
       shareType: savedTrip.share_type,
     });
 
@@ -1645,10 +1643,7 @@ app.put('/api/trips/:id', authenticateUser, async (req, res) => {
       updates.traveler_profile = updates.travelerProfile;
       delete updates.travelerProfile;
     }
-    if (updates.isPublic !== undefined) {
-      updates.is_public = updates.isPublic;
-      delete updates.isPublic;
-    }
+
     if (updates.shareType) {
       updates.share_type = updates.shareType;
       delete updates.shareType;
@@ -1670,7 +1665,6 @@ app.put('/api/trips/:id', authenticateUser, async (req, res) => {
           budget: updated.budget,
           tips: updated.tips,
           updatedAt: updated.updated_at,
-          isPublic: updated.is_public,
           shareType: updated.share_type,
         };
         await dbService.updateUser(user.email, { trips: user.trips });

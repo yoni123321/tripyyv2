@@ -74,8 +74,8 @@ async function migrateData() {
       for (const [tripId, trip] of data.trips) {
         try {
           const query = `
-            INSERT INTO trips (id, user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, is_public, share_type, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            INSERT INTO trips (id, user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, share_type, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (id) DO UPDATE SET
               name = EXCLUDED.name,
               destination = EXCLUDED.destination,
@@ -87,7 +87,7 @@ async function migrateData() {
               budget = EXCLUDED.budget,
               tips = EXCLUDED.tips,
               suggestions = EXCLUDED.suggestions,
-              is_public = EXCLUDED.is_public,
+              
               share_type = EXCLUDED.share_type,
               updated_at = EXCLUDED.updated_at
           `;

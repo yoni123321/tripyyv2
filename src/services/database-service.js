@@ -5,7 +5,7 @@ class DatabaseService {
   async createUser(userData) {
     const query = `
       INSERT INTO users (email, password, name, created_at, last_login, email_verified, email_verified_at, preferences, traveler_profile, llm_config, saved_agents, friends, communities, posts, trips, likes, last_known_location)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING id
     `;
     
@@ -161,8 +161,8 @@ class DatabaseService {
   // Trip operations
   async createTrip(tripData) {
     const query = `
-      INSERT INTO trips (user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, is_public, share_type, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      INSERT INTO trips (user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, share_type, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `;
     
@@ -178,7 +178,6 @@ class DatabaseService {
       JSON.stringify(tripData.budget || {}),
       JSON.stringify(tripData.tips || []),
       JSON.stringify(tripData.suggestions || []),
-      tripData.isPublic || false,
       tripData.shareType || 'private',
       tripData.createdAt,
       tripData.updatedAt
@@ -191,7 +190,7 @@ class DatabaseService {
   async createUserTrip(tripData) {
     const query = `
       INSERT INTO trips (
-        user_id, name, destination, summary, is_public, share_type, 
+        user_id, name, destination, summary, share_type, 
         start_date, end_date, local_trip_id, owner_id, budget, 
         itinerary, tips, suggestions, traveler_profile, created_at, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
@@ -203,7 +202,6 @@ class DatabaseService {
       tripData.name,
       tripData.destination || '',
       tripData.summary || '',
-      tripData.is_public || false,
       tripData.share_type || 'private',
       tripData.start_date || null,
       tripData.end_date || null,
@@ -294,10 +292,7 @@ class DatabaseService {
       updateFields.push(`suggestions = $${valueIndex++}`);
       values.push(JSON.stringify(updates.suggestions));
     }
-    if (updates.is_public !== undefined) {
-      updateFields.push(`is_public = $${valueIndex++}`);
-      values.push(updates.is_public);
-    }
+
     if (updates.share_type !== undefined) {
       updateFields.push(`share_type = $${valueIndex++}`);
       values.push(updates.share_type);
@@ -357,24 +352,38 @@ class DatabaseService {
   }
 
   async deleteUserTrip(userId, tripId) {
+    console.log(`🗑️ Database: Deleting trip ${tripId} for user ${userId}`);
+    
     // Get current user trips
     const user = await this.getUserById(userId);
     if (!user) {
+      console.log(`❌ Database: User not found: ${userId}`);
       throw new Error('User not found');
     }
+    
+    console.log(`✅ Database: Found user ${user.email} with ${user.trips?.length || 0} trips`);
     
     const trips = user.trips || [];
     const tripIndex = trips.findIndex(trip => trip.id === tripId);
     
     if (tripIndex === -1) {
+      console.log(`❌ Database: Trip ${tripId} not found in user's trips`);
       throw new Error('Trip not found');
     }
     
-    // Remove the trip
-    const deletedTrip = trips.splice(tripIndex, 1)[0];
+    console.log(`✅ Database: Found trip at index ${tripIndex}:`, trips[tripIndex].name);
     
-    // Update user's trips column
-    await this.updateUser(user.email, { trips });
+    // Create a new array without the deleted trip (don't modify original)
+    const updatedTrips = trips.filter(trip => trip.id !== tripId);
+    const deletedTrip = trips[tripIndex];
+    
+    console.log(`🗑️ Database: Removing trip "${deletedTrip.name}" (${deletedTrip.id})`);
+    console.log(`📊 Database: Trips before: ${trips.length}, after: ${updatedTrips.length}`);
+    
+    // Update user's trips column with the new array
+    const updateResult = await this.updateUser(user.email, { trips: updatedTrips });
+    console.log(`✅ Database: User updated successfully, trips column now has ${updateResult.trips?.length || 0} trips`);
+    
     return deletedTrip;
   }
 

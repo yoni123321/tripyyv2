@@ -102,7 +102,6 @@ const initDatabase = async () => {
         budget JSONB DEFAULT '{}',
         tips JSONB DEFAULT '[]',
         suggestions JSONB DEFAULT '[]',
-        is_public BOOLEAN DEFAULT FALSE,
         share_type VARCHAR(50) DEFAULT 'private',
         share_id VARCHAR(255) UNIQUE,
         local_trip_id VARCHAR(255),
