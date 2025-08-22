@@ -131,6 +131,11 @@ class DatabaseService {
       updateFields.push(`saved_agents = $${valueIndex++}`);
       values.push(JSON.stringify(updates.savedAgents));
     }
+    if (updates.trips !== undefined) {
+      updateFields.push(`trips = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.trips));
+      console.log(`🔄 Setting trips to:`, JSON.stringify(updates.trips));
+    }
     
     if (updateFields.length === 0) {
       throw new Error('No valid update fields provided');
