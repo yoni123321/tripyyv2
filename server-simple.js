@@ -1167,6 +1167,105 @@ app.post('/api/user/trips', authenticateUser, async (req, res) => {
   }
 });
 
+// Update trip in users table trips column
+app.put('/api/user/trips/:tripId', authenticateUser, async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const updates = req.body;
+    
+    console.log(`🔄 Updating trip ${tripId} for user ${req.userId}`);
+    console.log(`📝 Update data:`, JSON.stringify(updates, null, 2));
+    
+    // Get current user from database
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      console.log(`❌ User not found: ${req.userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log(`✅ Found user: ${user.email}`);
+    console.log(`📊 User currently has ${user.trips?.length || 0} trips`);
+    
+    // Use the database service method to update the trip
+    const updatedTrip = await dbService.updateUserTrip(req.userId, tripId, updates);
+    
+    console.log(`✅ Trip "${updatedTrip.name}" updated successfully for user ${user.email}`);
+    
+    res.json({ 
+      data: { 
+        message: 'Trip updated successfully',
+        trip: updatedTrip
+      } 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating trip:', error);
+    
+    // Provide more specific error messages
+    if (error.message === 'User not found') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (error.message === 'Trip not found') {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+    
+    res.status(500).json({ error: 'Failed to update trip' });
+  }
+});
+
+// Delete trip from users table trips column
+app.delete('/api/user/trips/:tripId', authenticateUser, async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    
+    console.log(`🗑️ Deleting trip ${tripId} for user ${req.userId}`);
+    
+    // Get current user from database
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      console.log(`❌ User not found: ${req.userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log(`✅ Found user: ${user.email}`);
+    console.log(`📊 User currently has ${user.trips?.length || 0} trips`);
+    
+    // Use the database service method to delete the trip
+    const deletedTrip = await dbService.deleteUserTrip(req.userId, tripId);
+    
+    console.log(`✅ Trip "${deletedTrip.name}" deleted successfully from user ${user.email}`);
+    
+    // Get updated user to confirm deletion
+    const updatedUser = await dbService.getUserById(req.userId);
+    console.log(`📊 User now has ${updatedUser.trips?.length || 0} trips`);
+    
+    res.json({ 
+      data: { 
+        message: 'Trip deleted successfully',
+        deletedTrip: {
+          id: deletedTrip.id,
+          name: deletedTrip.name,
+          destination: deletedTrip.destination
+        },
+        remainingTrips: updatedUser.trips?.length || 0
+      } 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting trip:', error);
+    
+    // Provide more specific error messages
+    if (error.message === 'User not found') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (error.message === 'Trip not found') {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+    
+    res.status(500).json({ error: 'Failed to delete trip' });
+  }
+});
+
 // Communities endpoints
 app.get('/api/communities', async (req, res) => {
   try {
