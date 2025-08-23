@@ -106,6 +106,7 @@ const initDatabase = async () => {
         share_id VARCHAR(255) UNIQUE,
         local_trip_id VARCHAR(255),
         owner_id INTEGER REFERENCES users(id),
+        numberOfTravelers INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

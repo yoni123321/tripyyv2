@@ -161,8 +161,8 @@ class DatabaseService {
   // Trip operations
   async createTrip(tripData) {
     const query = `
-      INSERT INTO trips (user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, share_type, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      INSERT INTO trips (user_id, name, destination, start_date, end_date, itinerary, preferences, traveler_profile, budget, tips, suggestions, share_type, numberOfTravelers, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING id
     `;
     
@@ -179,6 +179,7 @@ class DatabaseService {
       JSON.stringify(tripData.tips || []),
       JSON.stringify(tripData.suggestions || []),
       tripData.shareType || 'private',
+      tripData.numberOfTravelers || null,
       tripData.createdAt,
       tripData.updatedAt
     ];
@@ -192,8 +193,8 @@ class DatabaseService {
       INSERT INTO trips (
         user_id, name, destination, summary, share_type, 
         start_date, end_date, local_trip_id, owner_id, budget, 
-        itinerary, tips, suggestions, traveler_profile, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
+        itinerary, tips, suggestions, traveler_profile, numberOfTravelers, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
       RETURNING *
     `;
     
@@ -212,6 +213,7 @@ class DatabaseService {
       JSON.stringify(tripData.tips || []),
       JSON.stringify(tripData.suggestions || []),
       JSON.stringify(tripData.traveler_profile || {}),
+      tripData.numberOfTravelers || null,
       new Date(),
       new Date()
     ];
@@ -298,6 +300,11 @@ class DatabaseService {
       values.push(updates.share_type);
     }
     
+    if (updates.numberOfTravelers !== undefined) {
+      updateFields.push(`numberOfTravelers = $${valueIndex++}`);
+      values.push(updates.numberOfTravelers);
+    }
+    
     // Always update the updated_at timestamp
     updateFields.push(`updated_at = $${valueIndex++}`);
     values.push(new Date());
@@ -348,12 +355,17 @@ class DatabaseService {
     console.log(`✅ Database: Found trip "${originalTrip.name}" at index ${tripIndex}`);
     console.log(`📊 Database: Original trip data:`, JSON.stringify(originalTrip, null, 2));
     
-    // Handle shareType field mapping (frontend sends shareType, we store as share_type)
+    // Handle field mapping (frontend sends camelCase, we store as snake_case)
     const processedUpdates = { ...updates };
     if (updates.shareType !== undefined) {
       processedUpdates.share_type = updates.shareType;
       delete processedUpdates.shareType;
       console.log(`🔄 Database: Mapped shareType "${updates.shareType}" to share_type "${processedUpdates.share_type}"`);
+    }
+    
+    // numberOfTravelers is already in the correct format, no mapping needed
+    if (updates.numberOfTravelers !== undefined) {
+      console.log(`🔄 Database: Updating numberOfTravelers to: ${updates.numberOfTravelers}`);
     }
     
     // Update the trip

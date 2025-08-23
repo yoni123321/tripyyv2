@@ -1105,7 +1105,7 @@ app.put('/api/user/llm-config', authenticateUser, async (req, res) => {
 // Create trip in users table trips column
 app.post('/api/user/trips', authenticateUser, async (req, res) => {
   try {
-    const { name, destination, summary, share_type, start_date, end_date, local_trip_id, owner_id, budget, itinerary, tips, suggestions, traveler_profile } = req.body;
+    const { name, destination, summary, share_type, start_date, end_date, local_trip_id, owner_id, budget, itinerary, tips, suggestions, traveler_profile, numberOfTravelers } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Trip name is required' });
@@ -1136,6 +1136,8 @@ app.post('/api/user/trips', authenticateUser, async (req, res) => {
       tips: tips || [],
       suggestions: suggestions || [],
       traveler_profile: traveler_profile || {},
+      // Store numberOfTravelers at the root level as requested
+      numberOfTravelers: numberOfTravelers || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1609,7 +1611,8 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
       tips = [],
       suggestions = [],
       isPublic = false,
-      shareType = 'private'
+      shareType = 'private',
+      numberOfTravelers
     } = req.body || {};
 
     const trip = {
@@ -1624,7 +1627,8 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
       budget,
       tips,
       suggestions,
-
+      // Store numberOfTravelers at the root level as requested
+      numberOfTravelers: numberOfTravelers || null,
       share_type: shareType,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1644,6 +1648,8 @@ app.post('/api/trips', authenticateUser, async (req, res) => {
       budget: savedTrip.budget,
       tips: savedTrip.tips,
       summary: req.body.summary,
+      // Include numberOfTravelers at the root level
+      numberOfTravelers: savedTrip.numberOfTravelers || null,
       createdAt: savedTrip.created_at,
       updatedAt: savedTrip.updated_at,
       shareType: savedTrip.share_type,
