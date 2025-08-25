@@ -1538,45 +1538,74 @@ app.get('/api/posts', async (req, res) => {
       
       // Process connected POI data if present
       let connectedPOIData = null;
-      if (post.connected_poi && typeof post.connected_poi === 'object') {
-        const poi = post.connected_poi;
+      
+      // DEBUG: Log the raw connected_poi data to see what we're getting
+      console.log(`🔍 Raw connected_poi data for post ${post.id}:`, {
+        value: post.connected_poi,
+        type: typeof post.connected_poi,
+        isObject: typeof post.connected_poi === 'object',
+        isString: typeof post.connected_poi === 'string',
+        isNull: post.connected_poi === null,
+        isUndefined: post.connected_poi === undefined
+      });
+      
+      if (post.connected_poi) {
+        let poi = post.connected_poi;
         
-        // CRITICAL: Validate that POI ID is present
-        if (!poi.id) {
-          console.error('🚨 CRITICAL: POI ID missing in post data:', JSON.stringify(poi, null, 2));
-          console.error('🚨 Post ID:', post.id, 'User ID:', post.user_id);
-          
-          // Generate a fallback ID to prevent frontend errors
-          const fallbackId = `poi_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          console.log('🔧 Generated fallback POI ID:', fallbackId);
-          
-          connectedPOIData = {
-            id: fallbackId,  // ← CRITICAL: Ensure ID is always present
-            name: poi.name || 'Unknown POI',
-            description: poi.description || '',
-            coordinates: poi.coordinates || poi.location || null,
-            photo: poi.photo || null,
-            icon: poi.icon || '',
-            type: poi.type || 'public',
-            author: poi.author || '',
-            user_id: poi.user_id
-          };
-        } else {
-          connectedPOIData = {
-            id: poi.id,  // ← CRITICAL: Use existing POI ID
-            name: poi.name || '',
-            description: poi.description || '',
-            coordinates: poi.coordinates || poi.location || null,
-            photo: poi.photo || null,
-            icon: poi.icon || '',
-            type: poi.type || 'public',
-            author: poi.author || '',
-            user_id: poi.user_id
-          };
-          console.log('✅ Post connected POI data with ID:', poi.id);
+        // Handle case where connected_poi might be a string (JSONB parsing issue)
+        if (typeof poi === 'string') {
+          try {
+            console.log('🔄 Parsing string POI data:', poi);
+            poi = JSON.parse(poi);
+            console.log('✅ Successfully parsed POI string to object:', poi);
+          } catch (parseError) {
+            console.error('❌ Failed to parse POI string:', parseError);
+            console.error('❌ Raw string data:', poi);
+            poi = null;
+          }
         }
         
-        console.log('📍 Complete POI data for frontend:', JSON.stringify(connectedPOIData, null, 2));
+        // Now check if we have a valid POI object
+        if (poi && typeof poi === 'object' && poi !== null) {
+          // CRITICAL: Validate that POI ID is present
+          if (!poi.id) {
+            console.error('🚨 CRITICAL: POI ID missing in post data:', JSON.stringify(poi, null, 2));
+            console.error('🚨 Post ID:', post.id, 'User ID:', post.user_id);
+            
+            // Generate a fallback ID to prevent frontend errors
+            const fallbackId = `poi_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            console.log('🔧 Generated fallback POI ID:', fallbackId);
+            
+            connectedPOIData = {
+              id: fallbackId,  // ← CRITICAL: Ensure ID is always present
+              name: poi.name || 'Unknown POI',
+              description: poi.description || '',
+              coordinates: poi.coordinates || poi.location || null,
+              photo: poi.photo || null,
+              icon: poi.icon || '',
+              type: poi.type || 'public',
+              author: poi.author || '',
+              user_id: poi.user_id
+            };
+          } else {
+            connectedPOIData = {
+              id: poi.id,  // ← CRITICAL: Use existing POI ID
+              name: poi.name || '',
+              description: poi.description || '',
+              coordinates: poi.coordinates || poi.location || null,
+              photo: poi.photo || null,
+              icon: poi.icon || '',
+              type: poi.type || 'public',
+              author: poi.author || '',
+              user_id: poi.user_id
+            };
+            console.log('✅ Post connected POI data with ID:', poi.id);
+          }
+          
+          console.log('📍 Complete POI data for frontend:', JSON.stringify(connectedPOIData, null, 2));
+        } else {
+          console.log('⚠️ Invalid POI data structure:', poi);
+        }
       }
 
       return {
@@ -1611,12 +1640,47 @@ app.get('/api/test-poi-ids', async (req, res) => {
     console.log('🧪 Testing POI ID handling in posts...');
     
     const posts = await dbService.getAllPosts();
-    const postsWithPOI = posts.filter(post => post.connected_poi && typeof post.connected_poi === 'object');
+    
+    // Enhanced filtering to handle both object and string POI data
+    const postsWithPOI = posts.filter(post => {
+      if (!post.connected_poi) return false;
+      
+      // Handle string POI data (JSONB parsing issue)
+      if (typeof post.connected_poi === 'string') {
+        try {
+          const parsed = JSON.parse(post.connected_poi);
+          return typeof parsed === 'object' && parsed !== null;
+        } catch (error) {
+          console.log('⚠️ Post has invalid POI string data:', post.id, post.connected_poi);
+          return false;
+        }
+      }
+      
+      return typeof post.connected_poi === 'object' && post.connected_poi !== null;
+    });
     
     console.log(`📊 Found ${postsWithPOI.length} posts with connected POIs`);
     
     const poiIdAnalysis = postsWithPOI.map(post => {
-      const poi = post.connected_poi;
+      let poi = post.connected_poi;
+      
+      // Parse string POI data if needed
+      if (typeof poi === 'string') {
+        try {
+          poi = JSON.parse(poi);
+        } catch (error) {
+          console.error('❌ Failed to parse POI string in test:', error);
+          return {
+            postId: post.id,
+            poiId: null,
+            hasId: false,
+            idType: 'parse_error',
+            poiName: 'Parse Error',
+            poiDescription: 'Failed to parse POI data'
+          };
+        }
+      }
+      
       const hasId = !!poi.id;
       const idType = typeof poi.id;
       const idValue = poi.id;
@@ -1656,13 +1720,73 @@ app.get('/api/test-poi-ids', async (req, res) => {
         missingPOIIds: missingIds.length,
         analysis: poiIdAnalysis,
         sampleValidPost: validIds[0] || null,
-        sampleMissingPost: missingIds[0] || null
+        sampleMissingPost: missingIds[0] || null,
+        recommendation: missingIds.length > 0 ? 'Run /api/fix-poi-strings to fix string POI data' : 'All POI data is properly formatted'
       }
     });
     
   } catch (error) {
     console.error('❌ POI ID test error:', error);
     res.status(500).json({ error: 'POI ID test failed' });
+  }
+});
+
+// Fix endpoint to convert string POI data back to objects
+app.post('/api/fix-poi-strings', async (req, res) => {
+  try {
+    console.log('🔧 Starting POI string data fix...');
+    
+    const posts = await dbService.getAllPosts();
+    const postsWithStringPOI = posts.filter(post => 
+      post.connected_poi && typeof post.connected_poi === 'string'
+    );
+    
+    console.log(`📊 Found ${postsWithStringPOI.length} posts with string POI data`);
+    
+    let fixedCount = 0;
+    let errorCount = 0;
+    
+    for (const post of postsWithStringPOI) {
+      try {
+        console.log(`🔧 Fixing post ${post.id} with string POI data`);
+        
+        // Parse the string POI data
+        const parsedPOI = JSON.parse(post.connected_poi);
+        
+        // Ensure POI ID is present
+        if (!parsedPOI.id) {
+          const generatedId = `poi_fix_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          parsedPOI.id = generatedId;
+          console.log(`🔧 Generated POI ID for post ${post.id}:`, generatedId);
+        }
+        
+        // Update the post with proper object data
+        await dbService.updatePost(post.id, { connected_poi: parsedPOI });
+        
+        console.log(`✅ Fixed post ${post.id} - converted string to object`);
+        fixedCount++;
+        
+      } catch (error) {
+        console.error(`❌ Failed to fix post ${post.id}:`, error);
+        errorCount++;
+      }
+    }
+    
+    console.log(`🎉 POI string fix complete! Fixed: ${fixedCount}, Errors: ${errorCount}`);
+    
+    res.json({
+      data: {
+        message: 'POI string data fix complete',
+        totalPostsProcessed: postsWithStringPOI.length,
+        fixedCount,
+        errorCount,
+        recommendation: errorCount > 0 ? 'Some posts could not be fixed automatically' : 'All POI string data has been converted to objects'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ POI string fix error:', error);
+    res.status(500).json({ error: 'POI string fix failed' });
   }
 });
 
