@@ -1540,18 +1540,43 @@ app.get('/api/posts', async (req, res) => {
       let connectedPOIData = null;
       if (post.connected_poi && typeof post.connected_poi === 'object') {
         const poi = post.connected_poi;
-        connectedPOIData = {
-          id: poi.id,
-          name: poi.name || '',
-          description: poi.description || '',
-          coordinates: poi.coordinates || poi.location || null,
-          photo: poi.photo || null,
-          icon: poi.icon || '',
-          type: poi.type || 'public',
-          author: poi.author || '',
-          user_id: poi.user_id
-        };
-        console.log('📍 Post connected POI data:', JSON.stringify(connectedPOIData, null, 2));
+        
+        // CRITICAL: Validate that POI ID is present
+        if (!poi.id) {
+          console.error('🚨 CRITICAL: POI ID missing in post data:', JSON.stringify(poi, null, 2));
+          console.error('🚨 Post ID:', post.id, 'User ID:', post.user_id);
+          
+          // Generate a fallback ID to prevent frontend errors
+          const fallbackId = `poi_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          console.log('🔧 Generated fallback POI ID:', fallbackId);
+          
+          connectedPOIData = {
+            id: fallbackId,  // ← CRITICAL: Ensure ID is always present
+            name: poi.name || 'Unknown POI',
+            description: poi.description || '',
+            coordinates: poi.coordinates || poi.location || null,
+            photo: poi.photo || null,
+            icon: poi.icon || '',
+            type: poi.type || 'public',
+            author: poi.author || '',
+            user_id: poi.user_id
+          };
+        } else {
+          connectedPOIData = {
+            id: poi.id,  // ← CRITICAL: Use existing POI ID
+            name: poi.name || '',
+            description: poi.description || '',
+            coordinates: poi.coordinates || poi.location || null,
+            photo: poi.photo || null,
+            icon: poi.icon || '',
+            type: poi.type || 'public',
+            author: poi.author || '',
+            user_id: poi.user_id
+          };
+          console.log('✅ Post connected POI data with ID:', poi.id);
+        }
+        
+        console.log('📍 Complete POI data for frontend:', JSON.stringify(connectedPOIData, null, 2));
       }
 
       return {
@@ -1577,6 +1602,67 @@ app.get('/api/posts', async (req, res) => {
   } catch (error) {
     console.error('Get posts error:', error);
     res.status(500).json({ error: 'Failed to get posts' });
+  }
+});
+
+// Test endpoint to verify POI ID handling in posts
+app.get('/api/test-poi-ids', async (req, res) => {
+  try {
+    console.log('🧪 Testing POI ID handling in posts...');
+    
+    const posts = await dbService.getAllPosts();
+    const postsWithPOI = posts.filter(post => post.connected_poi && typeof post.connected_poi === 'object');
+    
+    console.log(`📊 Found ${postsWithPOI.length} posts with connected POIs`);
+    
+    const poiIdAnalysis = postsWithPOI.map(post => {
+      const poi = post.connected_poi;
+      const hasId = !!poi.id;
+      const idType = typeof poi.id;
+      const idValue = poi.id;
+      
+      if (!hasId) {
+        console.error('🚨 Post missing POI ID:', {
+          postId: post.id,
+          poiData: poi
+        });
+      }
+      
+      return {
+        postId: post.id,
+        poiId: idValue,
+        hasId,
+        idType,
+        poiName: poi.name || 'No name',
+        poiDescription: poi.description || 'No description'
+      };
+    });
+    
+    const missingIds = poiIdAnalysis.filter(item => !item.hasId);
+    const validIds = poiIdAnalysis.filter(item => item.hasId);
+    
+    console.log(`✅ Posts with valid POI IDs: ${validIds.length}`);
+    console.log(`❌ Posts missing POI IDs: ${missingIds.length}`);
+    
+    if (missingIds.length > 0) {
+      console.error('🚨 Posts missing POI IDs:', missingIds);
+    }
+    
+    res.json({
+      data: {
+        message: 'POI ID analysis complete',
+        totalPostsWithPOI: postsWithPOI.length,
+        validPOIIds: validIds.length,
+        missingPOIIds: missingIds.length,
+        analysis: poiIdAnalysis,
+        sampleValidPost: validIds[0] || null,
+        sampleMissingPost: missingIds[0] || null
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ POI ID test error:', error);
+    res.status(500).json({ error: 'POI ID test failed' });
   }
 });
 
@@ -1606,19 +1692,23 @@ app.put('/api/posts/:postId', authenticateUser, async (req, res) => {
         // Remove POI connection
         connectedPOIData = null;
       } else if (typeof poiData === 'object' && poiData !== null) {
+        // CRITICAL: Ensure POI ID is always present when updating
+        const poiId = poiData.id || existingPost.connected_poi?.id || `poi_update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
         // Update with new POI data
         connectedPOIData = {
-          id: poiData.id || null,
-          name: poiData.name || '',
-          description: poiData.description || '',
-          coordinates: poiData.coordinates || poiData.location || null,
-          photo: poiData.photo || (poiData.photos && Array.isArray(poiData.photos) ? poiData.photos[0] : null),
-          icon: poiData.icon || '',
-          type: poiData.type || 'public',
-          author: poiData.author || '',
-          user_id: poiData.user_id || req.userId
+          id: poiId,  // ← CRITICAL: Always include POI ID
+          name: poiData.name || existingPost.connected_poi?.name || '',
+          description: poiData.description || existingPost.connected_poi?.description || '',
+          coordinates: poiData.coordinates || poiData.location || existingPost.connected_poi?.coordinates || null,
+          photo: poiData.photo || (poiData.photos && Array.isArray(poiData.photos) ? poiData.photos[0] : null) || existingPost.connected_poi?.photo || null,
+          icon: poiData.icon || existingPost.connected_poi?.icon || '',
+          type: poiData.type || existingPost.connected_poi?.type || 'public',
+          author: poiData.author || existingPost.connected_poi?.author || '',
+          user_id: poiData.user_id || existingPost.connected_poi?.user_id || req.userId
         };
-        console.log('📍 Updating post with new POI data:', JSON.stringify(connectedPOIData, null, 2));
+        console.log('📍 Updating post with new POI data, preserving ID:', poiId);
+        console.log('📍 Complete updated POI data:', JSON.stringify(connectedPOIData, null, 2));
       }
     }
     
@@ -1860,8 +1950,11 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
       
       // If it's a full POI object, store it directly
       if (typeof poiData === 'object' && poiData !== null) {
+        // CRITICAL: Ensure POI ID is always present
+        const poiId = poiData.id || `poi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
         connectedPOIData = {
-          id: poiData.id || null,
+          id: poiId,  // ← CRITICAL: Always include POI ID
           name: poiData.name || '',
           description: poiData.description || '',
           coordinates: poiData.coordinates || poiData.location || null,
@@ -1871,14 +1964,15 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
           author: poiData.author || user.traveler_profile?.nickname || user.name || '',
           user_id: poiData.user_id || user.id
         };
-        console.log('📍 Storing full POI object in post:', JSON.stringify(connectedPOIData, null, 2));
+        console.log('📍 Storing full POI object in post with ID:', poiId);
+        console.log('📍 Complete POI data:', JSON.stringify(connectedPOIData, null, 2));
       } else {
         // If it's just a string/ID, try to fetch the POI data
         try {
           const existingPOI = await dbService.getPOIById(poiData);
           if (existingPOI) {
             connectedPOIData = {
-              id: existingPOI.id,
+              id: existingPOI.id,  // ← CRITICAL: Use existing POI ID
               name: existingPOI.name,
               description: existingPOI.description,
               coordinates: existingPOI.location,
@@ -1888,11 +1982,19 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
               author: existingPOI.author,
               user_id: existingPOI.user_id
             };
-            console.log('📍 Fetched existing POI data for post:', JSON.stringify(connectedPOIData, null, 2));
+            console.log('📍 Fetched existing POI data for post with ID:', existingPOI.id);
+            console.log('📍 Complete POI data:', JSON.stringify(connectedPOIData, null, 2));
           }
         } catch (error) {
-          console.log('⚠️ Could not fetch POI data, storing as reference:', poiData);
-          connectedPOIData = { reference: poiData };
+          console.log('⚠️ Could not fetch POI data, creating new POI reference with ID');
+          // Create a new POI reference with generated ID
+          const generatedPoiId = `poi_ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          connectedPOIData = { 
+            id: generatedPoiId,  // ← CRITICAL: Generate ID for reference
+            reference: poiData,
+            name: 'Referenced POI',
+            type: 'reference'
+          };
         }
       }
     }
