@@ -1536,12 +1536,31 @@ app.get('/api/posts', async (req, res) => {
       
       console.log(`🎯 Post author info:`, JSON.stringify(authorInfo, null, 2));
       
+      // Process connected POI data if present
+      let connectedPOIData = null;
+      if (post.connected_poi && typeof post.connected_poi === 'object') {
+        const poi = post.connected_poi;
+        connectedPOIData = {
+          id: poi.id,
+          name: poi.name || '',
+          description: poi.description || '',
+          coordinates: poi.coordinates || poi.location || null,
+          photo: poi.photo || null,
+          icon: poi.icon || '',
+          type: poi.type || 'public',
+          author: poi.author || '',
+          user_id: poi.user_id
+        };
+        console.log('📍 Post connected POI data:', JSON.stringify(connectedPOIData, null, 2));
+      }
+
       return {
         ...post,
         comments: enrichedComments,
         commentCount: enrichedComments.length,
         likeCount: post.like_count || 0,
-        author: authorInfo
+        author: authorInfo,
+        connectedPOI: connectedPOIData
       };
     }));
 
@@ -1552,13 +1571,83 @@ app.get('/api/posts', async (req, res) => {
     const normalizedPosts = enrichedPosts.map(p => ({
       ...p,
       // Map to camelCase for frontend consistency
-      connectedPOI: p.connected_poi ?? p.connectedPOI ?? '',
       createdAt: p.created_at ?? null
     }));
     res.json({ data: { posts: normalizedPosts } });
   } catch (error) {
     console.error('Get posts error:', error);
     res.status(500).json({ error: 'Failed to get posts' });
+  }
+});
+
+// Update post endpoint
+app.put('/api/posts/:postId', authenticateUser, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { content, location, connected_poi, connectedPOI } = req.body;
+    
+    // Get the post to check ownership
+    const existingPost = await dbService.getPostById(postId);
+    if (!existingPost) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    // Check if user owns the post
+    if (existingPost.user_id !== req.userId) {
+      return res.status(403).json({ error: 'Not authorized to update this post' });
+    }
+    
+    // Handle connected POI data updates
+    let connectedPOIData = existingPost.connected_poi;
+    if (connected_poi !== undefined || connectedPOI !== undefined) {
+      const poiData = connected_poi || connectedPOI;
+      
+      if (poiData === null) {
+        // Remove POI connection
+        connectedPOIData = null;
+      } else if (typeof poiData === 'object' && poiData !== null) {
+        // Update with new POI data
+        connectedPOIData = {
+          id: poiData.id || null,
+          name: poiData.name || '',
+          description: poiData.description || '',
+          coordinates: poiData.coordinates || poiData.location || null,
+          photo: poiData.photo || (poiData.photos && Array.isArray(poiData.photos) ? poiData.photos[0] : null),
+          icon: poiData.icon || '',
+          type: poiData.type || 'public',
+          author: poiData.author || '',
+          user_id: poiData.user_id || req.userId
+        };
+        console.log('📍 Updating post with new POI data:', JSON.stringify(connectedPOIData, null, 2));
+      }
+    }
+    
+    // Prepare update data
+    const updateData = {
+      content: content !== undefined ? content : existingPost.content,
+      location: location !== undefined ? location : existingPost.location,
+      connected_poi: connectedPOIData
+    };
+    
+    // Update the post
+    const updatedPost = await dbService.updatePost(postId, updateData);
+    
+    console.log('📝 Post updated successfully:', updatedPost);
+    
+    res.json({ 
+      data: { 
+        post: {
+          ...updatedPost,
+          connectedPOI: updatedPost.connected_poi,
+          createdAt: updatedPost.created_at
+        },
+        message: 'Post updated successfully'
+      } 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating post:', error);
+    res.status(500).json({ error: 'Failed to update post' });
   }
 });
 
@@ -1753,8 +1842,8 @@ app.delete('/api/trips/:id', authenticateUser, async (req, res) => {
 
 app.post('/api/posts', authenticateUser, async (req, res) => {
   try {
-    const { content, location } = req.body;
-    const connectedPOINormalized = req.body?.connected_poi ?? req.body?.connectedPOI ?? '';
+    const { content, location, connected_poi, connectedPOI } = req.body;
+    
     if (!content) {
       return res.status(400).json({ error: 'Post content is required' });
     }
@@ -1764,11 +1853,55 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Handle connected POI data - accept full POI object or existing POI ID
+    let connectedPOIData = null;
+    if (connected_poi || connectedPOI) {
+      const poiData = connected_poi || connectedPOI;
+      
+      // If it's a full POI object, store it directly
+      if (typeof poiData === 'object' && poiData !== null) {
+        connectedPOIData = {
+          id: poiData.id || null,
+          name: poiData.name || '',
+          description: poiData.description || '',
+          coordinates: poiData.coordinates || poiData.location || null,
+          photo: poiData.photo || (poiData.photos && Array.isArray(poiData.photos) ? poiData.photos[0] : null),
+          icon: poiData.icon || '',
+          type: poiData.type || 'public',
+          author: poiData.author || user.traveler_profile?.nickname || user.name || '',
+          user_id: poiData.user_id || user.id
+        };
+        console.log('📍 Storing full POI object in post:', JSON.stringify(connectedPOIData, null, 2));
+      } else {
+        // If it's just a string/ID, try to fetch the POI data
+        try {
+          const existingPOI = await dbService.getPOIById(poiData);
+          if (existingPOI) {
+            connectedPOIData = {
+              id: existingPOI.id,
+              name: existingPOI.name,
+              description: existingPOI.description,
+              coordinates: existingPOI.location,
+              photo: existingPOI.photos && Array.isArray(existingPOI.photos) ? existingPOI.photos[0] : null,
+              icon: existingPOI.icon,
+              type: existingPOI.type,
+              author: existingPOI.author,
+              user_id: existingPOI.user_id
+            };
+            console.log('📍 Fetched existing POI data for post:', JSON.stringify(connectedPOIData, null, 2));
+          }
+        } catch (error) {
+          console.log('⚠️ Could not fetch POI data, storing as reference:', poiData);
+          connectedPOIData = { reference: poiData };
+        }
+      }
+    }
+
     const post = {
       userId: user.id,
       content,
       location: location || '',
-      connectedPOI: connectedPOINormalized || '',
+      connectedPOI: connectedPOIData,
       likes: [],
       comments: [],
       createdAt: new Date().toISOString(),
@@ -1802,7 +1935,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     const responsePost = {
       ...savedPost,
       // Map to camelCase for frontend consistency
-      connectedPOI: savedPost.connected_poi ?? connectedPOINormalized,
+      connectedPOI: savedPost.connected_poi || connectedPOIData,
       createdAt: savedPost.created_at ?? post.createdAt
     };
     res.status(201).json({ data: { post: responsePost } });

@@ -139,7 +139,7 @@ const initDatabase = async () => {
         content TEXT NOT NULL,
         photos JSONB DEFAULT '[]',
         location TEXT,
-        connected_poi TEXT,
+        connected_poi JSONB,
         likes JSONB DEFAULT '[]',
         comments JSONB DEFAULT '[]',
         like_count INTEGER DEFAULT 0,

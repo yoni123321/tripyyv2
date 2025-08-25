@@ -535,7 +535,7 @@ class DatabaseService {
       postData.content,
       JSON.stringify(postData.photos || []),
       postData.location || '',
-      postData.connectedPOI || '',
+      JSON.stringify(postData.connectedPOI || null),
       JSON.stringify(postData.likes || []),
       JSON.stringify(postData.comments || []),
       postData.likes?.length || 0,
@@ -579,6 +579,11 @@ class DatabaseService {
     if (updates.comment_count !== undefined) {
       updateFields.push(`comment_count = $${valueIndex++}`);
       values.push(updates.comment_count);
+    }
+    
+    if (updates.connected_poi !== undefined) {
+      updateFields.push(`connected_poi = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.connected_poi));
     }
     
     if (updateFields.length === 0) {
