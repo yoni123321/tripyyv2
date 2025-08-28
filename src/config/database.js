@@ -70,6 +70,14 @@ const migrateDatabase = async () => {
     if (tableInfo.rows[0]?.data_type === 'integer') {
       console.log('🔧 Migrating users table ID column from INTEGER to VARCHAR...');
       
+      // Drop any existing users_new table from failed migrations
+      try {
+        await pool.query('DROP TABLE IF EXISTS users_new CASCADE');
+        console.log('🧹 Cleaned up any existing users_new table');
+      } catch (cleanupError) {
+        console.log('ℹ️ No existing users_new table to clean up');
+      }
+      
       // Create new table with correct structure
       await pool.query(`
         CREATE TABLE users_new (
@@ -95,6 +103,7 @@ const migrateDatabase = async () => {
       `);
       
       // Copy data from old table to new table
+      console.log('📋 Copying data from old table to new table...');
       await pool.query(`
         INSERT INTO users_new 
         SELECT 
@@ -119,6 +128,7 @@ const migrateDatabase = async () => {
         FROM users
       `);
       
+      console.log('🔄 Replacing old table with new structure...');
       // Drop old table and rename new one
       await pool.query('DROP TABLE users');
       await pool.query('ALTER TABLE users_new RENAME TO users');
