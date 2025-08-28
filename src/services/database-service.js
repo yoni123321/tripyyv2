@@ -465,6 +465,56 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  // Verification token management
+  async createVerificationToken(email, token, type, expiresAt) {
+    const query = `
+      INSERT INTO verification_tokens (email, token, type, expires_at)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `;
+    const result = await pool.query(query, [email, token, type, expiresAt]);
+    return result.rows[0];
+  }
+
+  async getVerificationToken(email, token, type) {
+    const query = `
+      SELECT * FROM verification_tokens 
+      WHERE email = $1 AND token = $2 AND type = $3 AND used = FALSE AND expires_at > NOW()
+    `;
+    const result = await pool.query(query, [email, token, type]);
+    return result.rows[0];
+  }
+
+  async markVerificationTokenAsUsed(tokenId) {
+    const query = `
+      UPDATE verification_tokens 
+      SET used = TRUE 
+      WHERE id = $1
+      RETURNING *
+    `;
+    const result = await pool.query(query, [tokenId]);
+    return result.rows[0];
+  }
+
+  async deleteExpiredVerificationTokens() {
+    const query = `
+      DELETE FROM verification_tokens 
+      WHERE expires_at < NOW() OR used = TRUE
+    `;
+    const result = await pool.query(query);
+    return result.rowCount;
+  }
+
+  async cleanupVerificationTokens() {
+    // Delete tokens older than 7 days
+    const query = `
+      DELETE FROM verification_tokens 
+      WHERE created_at < NOW() - INTERVAL '7 days'
+    `;
+    const result = await pool.query(query);
+    return result.rowCount;
+  }
+
   async updatePOI(poiId, updates) {
     const updateFields = [];
     const values = [];

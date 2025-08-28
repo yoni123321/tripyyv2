@@ -160,6 +160,19 @@ const initDatabase = async () => {
       )
     `);
 
+    // Verification tokens table for email verification and password reset
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS verification_tokens (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        token VARCHAR(255) NOT NULL,
+        type VARCHAR(50) NOT NULL CHECK (type IN ('email_verification', 'password_reset')),
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('✅ Database tables initialized successfully');
     
     // Add missing columns to existing tables if they don't exist

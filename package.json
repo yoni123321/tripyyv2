@@ -12,12 +12,14 @@
     "migrate-railway": "node migrate-to-railway.js",
     "test-endpoints": "node test-endpoints.js",
     "migrate-interests": "node migrate-interests.js",
+    "test-email": "node test-email.js",
     "cleanup-posts": "node -e \"require('./src/services/database-service').deletePostsOlderThan(24).then(result => console.log('Deleted posts:', result)).catch(console.error)\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@paypal/checkout-server-sdk": "^1.0.3",
     "@paypal/paypal-server-sdk": "^1.1.0",
+    "@sendgrid/mail": "^8.1.5",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "checkout-sdk-node": "^2.8.0",
@@ -42,5 +44,8 @@
     "backend"
   ],
   "author": "Yoni",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
 }

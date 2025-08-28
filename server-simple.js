@@ -14,8 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 const { pool, initDatabase, testConnection } = require('./src/config/database');
 const dbService = require('./src/services/database-service');
-// Email verification tokens (temporary in-memory storage)
-let emailVerificationTokens = new Map();
+const emailService = require('./src/services/email-service');
+
 async function initializeServer() {
   try {
     console.log('🚀 Starting Tripyy Backend Server...');
@@ -37,6 +37,9 @@ async function initializeServer() {
     
     // Schedule post cleanup
     schedulePostCleanup();
+    
+    // Schedule cleanup tasks
+    scheduleCleanupTasks();
     
     // Start server
     startServer();
@@ -85,6 +88,45 @@ function schedulePostCleanup() {
   
   console.log('⏰ Post cleanup scheduled to run every hour');
 }
+
+// Schedule cleanup tasks
+const scheduleCleanupTasks = () => {
+  // Clean up old posts every hour
+  setInterval(async () => {
+    try {
+      const deletedCount = await dbService.deletePostsOlderThan(24);
+      if (deletedCount > 0) {
+        console.log(`🧹 Cleaned up ${deletedCount} old posts`);
+      }
+    } catch (error) {
+      console.error('❌ Error during post cleanup:', error);
+    }
+  }, 60 * 60 * 1000); // Every hour
+
+  // Clean up expired verification tokens every 6 hours
+  setInterval(async () => {
+    try {
+      const deletedCount = await dbService.cleanupVerificationTokens();
+      if (deletedCount > 0) {
+        console.log(`🧹 Cleaned up ${deletedCount} expired verification tokens`);
+      }
+    } catch (error) {
+      console.error('❌ Error during token cleanup:', error);
+    }
+  }, 6 * 60 * 60 * 1000); // Every 6 hours
+
+  // Clean up expired tokens every hour
+  setInterval(async () => {
+    try {
+      const deletedCount = await dbService.deleteExpiredVerificationTokens();
+      if (deletedCount > 0) {
+        console.log(`🧹 Cleaned up ${deletedCount} expired tokens`);
+      }
+    } catch (error) {
+      console.error('❌ Error during expired token cleanup:', error);
+    }
+  }, 60 * 60 * 1000); // Every hour
+};
 
 // Initialize server with database
 initializeServer().catch(error => {
@@ -207,33 +249,49 @@ app.put('/api/test-traveler-profile', (req, res) => {
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
-    console.log('🏥 Health check requested');
-    
     // Test database connection
-    let dbStatus = 'Unknown';
-    try {
-      const isConnected = await testConnection();
-      dbStatus = isConnected ? 'Connected' : 'Failed';
-    } catch (error) {
-      dbStatus = 'Error: ' + error.message;
-    }
+    const dbResult = await pool.query('SELECT NOW()');
+    const dbConnected = !!dbResult.rows[0];
+    
+    // Get email service status
+    const emailStatus = emailService.getStatus();
     
     res.json({
-      status: 'ok',
-      message: 'Tripyy Backend is running',
+      status: 'healthy',
       timestamp: new Date().toISOString(),
-      database: dbStatus,
       environment: process.env.NODE_ENV || 'development',
-      databaseUrl: process.env.DATABASE_URL ? 'Set' : 'Missing'
+      database: dbConnected ? 'Connected' : 'Disconnected',
+      email: emailStatus.configured ? 'Configured' : 'Not Configured',
+      services: {
+        database: dbConnected,
+        email: emailStatus.configured,
+        cloudinary: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+        paypal: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),
+        stripe: !!process.env.STRIPE_SECRET_KEY
+      }
     });
   } catch (error) {
-    console.error('❌ Health check error:', error);
+    console.error('Health check error:', error);
     res.status(500).json({
-      status: 'error',
-      message: 'Health check failed',
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
       error: error.message
     });
   }
+});
+
+// Email service status endpoint
+app.get('/api/email/status', (req, res) => {
+  const status = emailService.getStatus();
+  res.json({
+    data: {
+      configured: status.configured,
+      fromEmail: status.fromEmail,
+      fromName: status.fromName,
+      hasApiKey: status.hasApiKey,
+      ready: emailService.isReady()
+    }
+  });
 });
 
 // Manual post cleanup endpoint (for testing and admin use)
@@ -608,18 +666,36 @@ app.post('/api/auth/register', async (req, res) => {
     // Save user to database
     const savedUser = await dbService.createUser(user);
 
-    // Generate token
+    // Generate verification token
+    const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Store verification token in database
+    await dbService.createVerificationToken(email, verificationToken, 'email_verification', expiresAt);
+
+    // Send verification email
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken, name);
+      console.log(`📧 Verification email sent to: ${email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send verification email:', emailError);
+      // Don't fail registration if email fails, but log it
+    }
+
+    // Generate token (user can login but with limited access until verified)
     const token = generateToken(userId);
 
     console.log(`✅ User registered successfully: ${email}`);
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User registered successfully. Please check your email to verify your account.',
       token,
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
-      }
+        name: user.name,
+        emailVerified: false
+      },
+      needsVerification: true
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -703,23 +779,32 @@ app.post('/api/auth/send-verification', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Generate verification token
+    // Check if user is already verified
+    if (user.email_verified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+
+    // Generate new verification token
     const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    // Store verification token in database (temporary in-memory for now)
-    emailVerificationTokens.set(email, {
-      token: verificationToken,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-    });
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // In a real app, you would send an email here
-    // For now, we'll just log it and return success
-    console.log(`📧 Verification email would be sent to: ${email}`);
-    console.log(`🔑 Verification token: ${verificationToken}`);
+    // Store verification token in database
+    await dbService.createVerificationToken(email, verificationToken, 'email_verification', expiresAt);
 
-    res.json({ 
-      message: 'Verification email sent successfully',
-      token: verificationToken // In production, don't return the token
-    });
+    // Send verification email
+    const emailResult = await emailService.sendVerificationEmail(email, verificationToken, user.name);
+    
+    if (emailResult.success) {
+      console.log(`📧 Verification email sent to: ${email}`);
+      res.json({ 
+        message: 'Verification email sent successfully',
+        // In production, don't return the token
+        ...(process.env.NODE_ENV === 'development' && { token: verificationToken })
+      });
+    } else {
+      console.error('❌ Failed to send verification email:', emailResult.error);
+      res.status(500).json({ error: 'Failed to send verification email' });
+    }
   } catch (error) {
     console.error('Send verification error:', error);
     res.status(500).json({ error: 'Failed to send verification email' });
@@ -735,15 +820,9 @@ app.post('/api/auth/verify-email', async (req, res) => {
     }
 
     // Check if verification token exists and is valid
-    const verificationData = emailVerificationTokens.get(email);
-    if (!verificationData || verificationData.token !== token) {
-      return res.status(400).json({ error: 'Invalid verification token' });
-    }
-
-    // Check if token is expired
-    if (new Date() > verificationData.expiresAt) {
-      emailVerificationTokens.delete(email);
-      return res.status(400).json({ error: 'Verification token has expired' });
+    const verificationData = await dbService.getVerificationToken(email, token, 'email_verification');
+    if (!verificationData) {
+      return res.status(400).json({ error: 'Invalid or expired verification token' });
     }
 
     // Find user and mark as verified in database
@@ -758,18 +837,27 @@ app.post('/api/auth/verify-email', async (req, res) => {
       emailVerifiedAt: new Date()
     });
     
-    // Remove verification token
-    emailVerificationTokens.delete(email);
+    // Mark verification token as used
+    await dbService.markVerificationTokenAsUsed(verificationData.id);
+
+    // Send welcome email
+    try {
+      await emailService.sendWelcomeEmail(email, user.name);
+      console.log(`📧 Welcome email sent to: ${email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send welcome email:', emailError);
+      // Don't fail verification if welcome email fails
+    }
 
     console.log(`✅ Email verified for user: ${email}`);
 
     res.json({ 
-      message: 'Email verified successfully',
+      message: 'Email verified successfully! Welcome to Tripyy!',
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        emailVerified: user.emailVerified
+        emailVerified: true
       }
     });
   } catch (error) {
@@ -2964,5 +3052,120 @@ function startServer() {
     console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
     console.log(`🗄️ Database: ✅ PostgreSQL (Production Ready)`);
     console.log(`🔗 CORS enabled for cross-origin requests`);
+    
+    // Log server status
+    console.log('🚀 Backend server running on port', PORT);
+    console.log('🌐 Network accessible at:', `http://${hostIp}:${PORT}`);
+    console.log('📡 GitHub AI:', process.env.GITHUB_AI ? '✅' : '❌');
+    console.log('🗺️ Google Maps:', process.env.GOOGLE_MAPS ? '✅' : '❌');
+    console.log('🗄️ Database:', '✅ PostgreSQL (Production Ready)');
+    console.log('📧 Email Service:', emailService.isReady() ? '✅ SendGrid Configured' : '⚠️ SendGrid Not Configured');
+    console.log('🔗 CORS enabled for cross-origin requests');
+    
+    if (emailService.isReady()) {
+      const emailStatus = emailService.getStatus();
+      console.log('📧 Email Configuration:');
+      console.log('   From Email:', emailStatus.fromEmail);
+      console.log('   From Name:', emailStatus.fromName);
+    } else {
+      console.log('📧 Email Service: Development mode - emails will be logged only');
+      console.log('💡 To enable real emails, set SENDGRID_API_KEY in environment variables');
+    }
   });
 } 
+
+// Password reset endpoints
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Check if user exists in database
+    const user = await dbService.getUserByEmail(email);
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
+    }
+
+    // Generate reset token
+    const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store reset token in database
+    await dbService.createVerificationToken(email, resetToken, 'password_reset', expiresAt);
+
+    // Send password reset email
+    const emailResult = await emailService.sendPasswordResetEmail(email, resetToken, user.name);
+    
+    if (emailResult.success) {
+      console.log(`📧 Password reset email sent to: ${email}`);
+      res.json({ 
+        message: 'If an account with that email exists, a password reset link has been sent',
+        // In production, don't return the token
+        ...(process.env.NODE_ENV === 'development' && { token: resetToken })
+      });
+    } else {
+      console.error('❌ Failed to send password reset email:', emailResult.error);
+      res.status(500).json({ error: 'Failed to send password reset email' });
+    }
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ error: 'Email, token, and new password are required' });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    // Check if reset token exists and is valid
+    const resetData = await dbService.getVerificationToken(email, token, 'password_reset');
+    if (!resetData) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Find user
+    const user = await dbService.getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password in database
+    await dbService.updateUser(email, { password: hashedPassword });
+    
+    // Mark reset token as used
+    await dbService.markVerificationTokenAsUsed(resetData.id);
+
+    console.log(`✅ Password reset successfully for user: ${email}`);
+
+    res.json({ 
+      message: 'Password reset successfully. You can now login with your new password.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// ... existing code ...
