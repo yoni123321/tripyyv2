@@ -3163,8 +3163,18 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// Database migration endpoint
+// Database migration endpoint - IMMEDIATE FIX
 app.post('/api/admin/migrate-database', async (req, res) => {
+  await migrateDatabaseEndpoint(req, res);
+});
+
+// GET endpoint for easy browser access
+app.get('/api/admin/migrate-database', async (req, res) => {
+  await migrateDatabaseEndpoint(req, res);
+});
+
+// Shared migration logic
+async function migrateDatabaseEndpoint(req, res) {
   try {
     console.log('🔄 Starting database migration...');
     
@@ -3179,6 +3189,14 @@ app.post('/api/admin/migrate-database', async (req, res) => {
     
     if (tableInfo.rows[0]?.data_type === 'integer') {
       console.log('🔧 Converting ID column from INTEGER to VARCHAR...');
+      
+      // Drop any existing users_new table from failed migrations
+      try {
+        await pool.query('DROP TABLE IF EXISTS users_new CASCADE');
+        console.log('🧹 Cleaned up any existing users_new table');
+      } catch (cleanupError) {
+        console.log('ℹ️ No existing users_new table to clean up');
+      }
       
       // Create a temporary table with the new structure
       await pool.query(`
@@ -3205,6 +3223,7 @@ app.post('/api/admin/migrate-database', async (req, res) => {
       `);
       
       // Copy data from old table to new table
+      console.log('📋 Copying data from old table to new table...');
       await pool.query(`
         INSERT INTO users_new 
         SELECT 
@@ -3229,6 +3248,7 @@ app.post('/api/admin/migrate-database', async (req, res) => {
         FROM users
       `);
       
+      console.log('🔄 Replacing old table with new structure...');
       // Drop old table and rename new one
       await pool.query('DROP TABLE users');
       await pool.query('ALTER TABLE users_new RENAME TO users');
@@ -3244,6 +3264,4 @@ app.post('/api/admin/migrate-database', async (req, res) => {
     console.error('❌ Migration failed:', error);
     res.status(500).json({ error: 'Migration failed', details: error.message });
   }
-});
-
-// ... existing code ...
+}
