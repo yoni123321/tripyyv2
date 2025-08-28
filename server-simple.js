@@ -3249,9 +3249,26 @@ async function migrateDatabaseEndpoint(req, res) {
       `);
       
       console.log('🔄 Replacing old table with new structure...');
+      
+      // Drop foreign key constraints first
+      console.log('🔗 Dropping foreign key constraints...');
+      await pool.query('ALTER TABLE trips DROP CONSTRAINT IF EXISTS trips_user_id_fkey');
+      await pool.query('ALTER TABLE trips DROP CONSTRAINT IF EXISTS trips_owner_id_fkey');
+      await pool.query('ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_user_id_fkey');
+      await pool.query('ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_user_id_fkey');
+      await pool.query('ALTER TABLE communities DROP CONSTRAINT IF EXISTS communities_created_by_fkey');
+      
       // Drop old table and rename new one
       await pool.query('DROP TABLE users');
       await pool.query('ALTER TABLE users_new RENAME TO users');
+      
+      // Recreate foreign key constraints with new ID type
+      console.log('🔗 Recreating foreign key constraints...');
+      await pool.query('ALTER TABLE trips ADD CONSTRAINT trips_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)');
+      await pool.query('ALTER TABLE trips ADD CONSTRAINT trips_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id)');
+      await pool.query('ALTER TABLE pois ADD CONSTRAINT pois_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)');
+      await pool.query('ALTER TABLE posts ADD CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)');
+      await pool.query('ALTER TABLE communities ADD CONSTRAINT communities_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id)');
       
       console.log('✅ ID column migration completed successfully!');
       res.json({ success: true, message: 'Database migration completed successfully!' });
