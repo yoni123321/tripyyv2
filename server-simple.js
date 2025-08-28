@@ -590,11 +590,6 @@ app.post('/api/migrate', async (req, res) => {
   }
 });
 
-// Authentication endpoints - TEMPORARILY DISABLED FOR MIGRATION
-app.post('/api/auth/register', async (req, res) => {
-  res.status(503).json({ error: 'Registration temporarily disabled during database migration' });
-});
-
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
