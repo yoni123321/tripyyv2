@@ -590,6 +590,11 @@ app.post('/api/migrate', async (req, res) => {
   }
 });
 
+// Authentication endpoints - TEMPORARILY DISABLED FOR MIGRATION
+app.post('/api/auth/register', async (req, res) => {
+  res.status(503).json({ error: 'Registration temporarily disabled during database migration' });
+});
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
@@ -693,17 +698,8 @@ app.post('/api/auth/register', async (req, res) => {
       needsVerification: true
     });
   } catch (error) {
-    console.error('❌ Registration error:', error);
-    console.error('❌ Error details:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      detail: error.detail
-    });
-    res.status(500).json({ 
-      error: 'Registration failed',
-      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
   }
 });
 

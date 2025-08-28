@@ -3,33 +3,95 @@ const { pool } = require('../config/database');
 class DatabaseService {
   // User operations
   async createUser(userData) {
-    const query = `
-      INSERT INTO users (email, password, name, created_at, last_login, email_verified, email_verified_at, preferences, traveler_profile, llm_config, saved_agents, friends, communities, posts, trips, likes, last_known_location)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-      RETURNING id
-    `;
-    
-    const values = [
-      userData.email,
-      userData.password,
-      userData.name,
-      userData.createdAt,
-      userData.lastLogin,
-      userData.emailVerified || false,
-      userData.emailVerifiedAt,
-      JSON.stringify(userData.preferences || {}),
-      JSON.stringify(userData.travelerProfile || {}),
-      JSON.stringify(userData.llmConfig || {}),
-      JSON.stringify(userData.savedAgents || []),
-      JSON.stringify(userData.friends || []),
-      JSON.stringify(userData.communities || []),
-      JSON.stringify(userData.posts || []),
-      JSON.stringify(userData.trips || []),
-      userData.likes || 0,
-      userData.lastKnownLocation ? JSON.stringify(userData.lastKnownLocation) : null
-    ];
-    
     try {
+      // First, let's check what columns actually exist in the users table
+      const tableInfo = await pool.query(`
+        SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns 
+        WHERE table_name = 'users' AND table_schema = 'public'
+        ORDER BY ordinal_position
+      `);
+      
+      console.log(`🔍 Found ${tableInfo.rows.length} columns in users table:`, 
+        tableInfo.rows.map(col => col.column_name));
+      
+      // Build dynamic INSERT query based on actual table structure
+      const columns = tableInfo.rows.map(col => col.column_name);
+      const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+      
+      const query = `
+        INSERT INTO users (${columns.join(', ')})
+        VALUES (${placeholders})
+        RETURNING id
+      `;
+      
+      console.log(`🔧 Dynamic INSERT query:`, query);
+      
+      // Build values array based on actual columns
+      const values = columns.map(columnName => {
+        switch (columnName) {
+          case 'id':
+            return userData.id || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          case 'email':
+            return userData.email;
+          case 'password':
+            return userData.password;
+          case 'name':
+            return userData.name;
+          case 'created_at':
+            return userData.createdAt || new Date();
+          case 'last_login':
+            return userData.lastLogin || new Date();
+          case 'email_verified':
+            return userData.emailVerified || false;
+          case 'email_verified_at':
+            return userData.emailVerifiedAt || null;
+          case 'preferences':
+            return JSON.stringify(userData.preferences || {});
+          case 'traveler_profile':
+            return JSON.stringify(userData.travelerProfile || {});
+          case 'llm_config':
+            return JSON.stringify(userData.llmConfig || {});
+          case 'saved_agents':
+            return JSON.stringify(userData.savedAgents || []);
+          case 'friends':
+            return JSON.stringify(userData.friends || []);
+          case 'communities':
+            return JSON.stringify(userData.communities || []);
+          case 'posts':
+            return JSON.stringify(userData.posts || []);
+          case 'trips':
+            return JSON.stringify(userData.trips || []);
+          case 'likes':
+            return userData.likes || 0;
+          case 'last_known_location':
+            return userData.lastKnownLocation ? JSON.stringify(userData.lastKnownLocation) : null;
+          default:
+            // For any other columns, use default value or null
+            const column = tableInfo.rows.find(col => col.column_name === columnName);
+            if (column.column_default) {
+              return column.column_default;
+            }
+            if (column.is_nullable === 'YES') {
+              return null;
+            }
+            // For required columns without defaults, provide sensible defaults
+            if (column.data_type === 'jsonb') {
+              return '{}';
+            }
+            if (column.data_type === 'integer') {
+              return 0;
+            }
+            if (column.data_type === 'boolean') {
+              return false;
+            }
+            return null;
+        }
+      });
+      
+      console.log(`🔧 Values array length: ${values.length}, Columns length: ${columns.length}`);
+      console.log(`🔧 Values:`, values.map((v, i) => `${columns[i]}: ${typeof v === 'string' ? v.substring(0, 50) : v}`));
+      
       const result = await pool.query(query, values);
       console.log(`✅ User created successfully in database: ${userData.email}`);
       return result.rows[0].id;
