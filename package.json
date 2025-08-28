@@ -14,6 +14,8 @@
     "migrate-interests": "node migrate-interests.js",
     "test-email": "node test-email.js",
     "test-db": "node test-db.js",
+    "test-registration": "node test-registration.js",
+    "quick-test": "node quick-test.js",
     "cleanup-posts": "node -e \"require('./src/services/database-service').deletePostsOlderThan(24).then(result => console.log('Deleted posts:', result)).catch(console.error)\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

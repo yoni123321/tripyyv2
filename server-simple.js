@@ -693,8 +693,17 @@ app.post('/api/auth/register', async (req, res) => {
       needsVerification: true
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    console.error('❌ Registration error:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail
+    });
+    res.status(500).json({ 
+      error: 'Registration failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 

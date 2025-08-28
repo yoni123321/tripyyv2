@@ -29,8 +29,14 @@ class DatabaseService {
       userData.lastKnownLocation ? JSON.stringify(userData.lastKnownLocation) : null
     ];
     
-    const result = await pool.query(query, values);
-    return result.rows[0].id;
+    try {
+      const result = await pool.query(query, values);
+      console.log(`✅ User created successfully in database: ${userData.email}`);
+      return result.rows[0].id;
+    } catch (error) {
+      console.error(`❌ Database error creating user ${userData.email}:`, error);
+      throw error;
+    }
   }
 
   async getUserByEmail(email) {
