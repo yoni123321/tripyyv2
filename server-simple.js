@@ -661,8 +661,8 @@ app.post('/api/auth/register', async (req, res) => {
     // Save user to database
     const savedUser = await dbService.createUser(user);
 
-    // Generate verification token
-    const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Generate 6-digit verification code
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Store verification token in database
@@ -779,8 +779,8 @@ app.post('/api/auth/send-verification', async (req, res) => {
       return res.status(400).json({ error: 'Email is already verified' });
     }
 
-    // Generate new verification token
-    const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Generate new 6-digit verification code
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Store verification token in database
@@ -3091,8 +3091,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
     }
 
-    // Generate reset token
-    const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Generate 6-digit reset code
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     // Store reset token in database

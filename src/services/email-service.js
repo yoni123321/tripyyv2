@@ -60,11 +60,11 @@ class EmailService {
               
               <p>Or copy and paste this link into your browser:</p>
               <p style="word-break: break-all; background: #eee; padding: 10px; border-radius: 5px;">${verificationUrl}</p>
-            ` : `
-              <p><strong>Your verification token:</strong></p>
-              <div class="token-box">${verificationToken}</div>
-              <p>Use this token in the Tripyy app to verify your email address.</p>
-            `}
+                               ` : `
+                     <p><strong>Your 6-digit verification code:</strong></p>
+                     <div class="token-box" style="font-size: 32px; font-weight: bold; text-align: center; background: #f0f0f0; padding: 20px; border-radius: 10px; letter-spacing: 5px; font-family: monospace;">${verificationToken}</div>
+                     <p>Enter this code in the Tripyy app to verify your email address.</p>
+                   `}
             
             <p><strong>This verification link will expire in 24 hours.</strong></p>
             
@@ -225,9 +225,9 @@ class EmailService {
               <p>Or copy and paste this link into your browser:</p>
               <p style="word-break: break-all; background: #eee; padding: 10px; border-radius: 5px;">${resetUrl}</p>
             ` : `
-              <p><strong>Your password reset token:</strong></p>
-              <div class="token-box">${resetToken}</div>
-              <p>Use this token in the Tripyy app to reset your password.</p>
+              <p><strong>Your 6-digit reset code:</strong></p>
+              <div class="token-box" style="font-size: 32px; font-weight: bold; text-align: center; background: #f0f0f0; padding: 20px; border-radius: 10px; letter-spacing: 5px; font-family: monospace;">${resetToken}</div>
+              <p>Enter this code in the Tripyy app to reset your password.</p>
             `}
             
             <div class="warning">
