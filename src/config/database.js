@@ -55,6 +55,84 @@ pool.on('remove', (client) => {
   console.log('🔗 Client removed from database pool');
 });
 
+// Migrate existing database structure if needed
+const migrateDatabase = async () => {
+  try {
+    console.log('🔄 Checking if database migration is needed...');
+    
+    // Check current users table structure
+    const tableInfo = await pool.query(`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name = 'id'
+    `);
+    
+    if (tableInfo.rows[0]?.data_type === 'integer') {
+      console.log('🔧 Migrating users table ID column from INTEGER to VARCHAR...');
+      
+      // Create new table with correct structure
+      await pool.query(`
+        CREATE TABLE users_new (
+          id VARCHAR(255) PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          name VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          email_verified BOOLEAN DEFAULT FALSE,
+          email_verified_at TIMESTAMP,
+          preferences JSONB DEFAULT '{}',
+          traveler_profile JSONB DEFAULT '{}',
+          llm_config JSONB DEFAULT '{}',
+          saved_agents JSONB DEFAULT '[]',
+          friends JSONB DEFAULT '[]',
+          likes INTEGER DEFAULT 0,
+          posts JSONB DEFAULT '[]',
+          communities JSONB DEFAULT '[]',
+          trips JSONB DEFAULT '[]',
+          last_known_location JSONB
+        )
+      `);
+      
+      // Copy data from old table to new table
+      await pool.query(`
+        INSERT INTO users_new 
+        SELECT 
+          id::VARCHAR(255),
+          email,
+          password,
+          name,
+          created_at,
+          last_login,
+          email_verified,
+          email_verified_at,
+          preferences,
+          traveler_profile,
+          llm_config,
+          saved_agents,
+          friends,
+          likes,
+          posts,
+          communities,
+          trips,
+          last_known_location
+        FROM users
+      `);
+      
+      // Drop old table and rename new one
+      await pool.query('DROP TABLE users');
+      await pool.query('ALTER TABLE users_new RENAME TO users');
+      
+      console.log('✅ Database migration completed successfully!');
+    } else {
+      console.log('ℹ️ No database migration needed');
+    }
+  } catch (error) {
+    console.error('❌ Database migration failed:', error);
+    throw error;
+  }
+};
+
 // Initialize database tables
 const initDatabase = async () => {
   try {
@@ -90,7 +168,7 @@ const initDatabase = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS trips (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id VARCHAR(255) REFERENCES users(id),
         name VARCHAR(255) NOT NULL,
         destination VARCHAR(255),
         summary TEXT,
@@ -105,7 +183,7 @@ const initDatabase = async () => {
         share_type VARCHAR(50) DEFAULT 'private',
         share_id VARCHAR(255) UNIQUE,
         local_trip_id VARCHAR(255),
-        owner_id INTEGER REFERENCES users(id),
+        owner_id VARCHAR(255) REFERENCES users(id),
         numberOfTravelers INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -123,7 +201,7 @@ const initDatabase = async () => {
         icon VARCHAR(10),
         type VARCHAR(50) DEFAULT 'public',
         author VARCHAR(255),
-        user_id INTEGER REFERENCES users(id),
+        user_id VARCHAR(255) REFERENCES users(id),
         reviews JSONB DEFAULT '[]',
         average_rating DECIMAL(3,2),
         review_count INTEGER DEFAULT 0,
@@ -135,7 +213,7 @@ const initDatabase = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id VARCHAR(255) REFERENCES users(id),
         content TEXT NOT NULL,
         photos JSONB DEFAULT '[]',
         location TEXT,
@@ -154,7 +232,7 @@ const initDatabase = async () => {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         description TEXT,
-        created_by INTEGER REFERENCES users(id),
+        created_by VARCHAR(255) REFERENCES users(id),
         members JSONB DEFAULT '[]',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -174,6 +252,9 @@ const initDatabase = async () => {
     `);
 
     console.log('✅ Database tables initialized successfully');
+    
+    // Run migration if needed
+    await migrateDatabase();
     
     // Add missing columns to existing tables if they don't exist
     await addMissingColumns();
