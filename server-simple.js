@@ -410,8 +410,8 @@ app.post('/api/migrate', async (req, res) => {
             name: userData.name,
             createdAt: new Date(userData.createdAt),
             lastLogin: new Date(userData.lastLogin),
-            emailVerified: userData.emailVerified,
-            emailVerifiedAt: userData.emailVerifiedAt ? new Date(userData.emailVerifiedAt) : null,
+                    emailVerified: userData.email_verified,
+        emailVerifiedAt: userData.email_verified_at ? new Date(userData.email_verified_at) : null,
             preferences: userData.preferences || {},
             travelerProfile: userData.travelerProfile || {},
             llmConfig: userData.llmConfig || {},
@@ -632,8 +632,8 @@ app.post('/api/auth/register', async (req, res) => {
       name,
       createdAt: new Date(),
       lastLogin: new Date(),
-      emailVerified: false, // New users need email verification
-      emailVerifiedAt: null,
+      email_verified: false, // New users need email verification
+      email_verified_at: null,
       preferences: {
         defaultCurrency: 'USD',
         language: 'en'
@@ -725,7 +725,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Check if email is verified (except for dev user)
-    if (email !== 'dev@tripyy.com' && !user.emailVerified) {
+    if (email !== 'dev@tripyy.com' && !user.email_verified) {
       return res.status(401).json({ 
         error: 'Please verify your email address before logging in',
         needsVerification: true 
