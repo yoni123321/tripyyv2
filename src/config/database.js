@@ -187,7 +187,8 @@ const initDatabase = async () => {
         posts JSONB DEFAULT '[]',
         communities JSONB DEFAULT '[]',
         trips JSONB DEFAULT '[]',
-        last_known_location JSONB
+        last_known_location JSONB,
+        account_type VARCHAR(50) DEFAULT 'traveler'
       )
     `);
 
@@ -276,6 +277,25 @@ const initDatabase = async () => {
         used BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    
+    // LLM usage tracking table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS llm_usage (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        account_type VARCHAR(50) DEFAULT 'traveler',
+        requests_used INTEGER DEFAULT 0,
+        month_year VARCHAR(7) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Add unique constraint for user/month combination
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_usage_user_month 
+      ON llm_usage(user_id, month_year)
     `);
 
     console.log('✅ Database tables initialized successfully');

@@ -97,10 +97,10 @@ const scheduleCleanupTasks = () => {
       const deletedCount = await dbService.deletePostsOlderThan(24);
       if (deletedCount > 0) {
         console.log(`🧹 Cleaned up ${deletedCount} old posts`);
-      }
-    } catch (error) {
-      console.error('❌ Error during post cleanup:', error);
     }
+  } catch (error) {
+    console.error('❌ Error during post cleanup:', error);
+  }
   }, 60 * 60 * 1000); // Every hour
 
   // Clean up expired verification tokens every 6 hours
@@ -256,9 +256,9 @@ app.get('/api/health', async (req, res) => {
     // Get email service status
     const emailStatus = emailService.getStatus();
     
-    res.json({
+  res.json({
       status: 'healthy',
-      timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       database: dbConnected ? 'Connected' : 'Disconnected',
       email: emailStatus.configured ? 'Configured' : 'Not Configured',
@@ -791,11 +791,11 @@ app.post('/api/auth/send-verification', async (req, res) => {
     
     if (emailResult.success) {
       console.log(`📧 Verification email sent to: ${email}`);
-      res.json({ 
-        message: 'Verification email sent successfully',
+    res.json({ 
+      message: 'Verification email sent successfully',
         // In production, don't return the token
         ...(process.env.NODE_ENV === 'development' && { token: verificationToken })
-      });
+    });
     } else {
       console.error('❌ Failed to send verification email:', emailResult.error);
       res.status(500).json({ error: 'Failed to send verification email' });
@@ -955,7 +955,7 @@ app.put('/api/user/traveler-profile', authenticateUser, async (req, res) => {
     const refreshed = await dbService.getUserById(req.userId);
     console.log(`🔄 Reloaded user from DB:`, JSON.stringify(refreshed?.traveler_profile, null, 2));
     const savedProfile = refreshed?.traveler_profile || mergedProfile;
-
+    
     console.log(`✅ Profile updated successfully`);
     console.log(`📝 Final saved profile:`, JSON.stringify(savedProfile, null, 2));
     console.log(`🔍 === END DEBUG ===\n`);
@@ -991,7 +991,7 @@ app.get('/api/user/stats', authenticateUser, async (req, res) => {
     console.error('Get user stats error:', error);
     res.status(500).json({ error: 'Failed to get user stats' });
   }
- });
+});
 
 app.get('/api/user/stats/:userId', authenticateUser, async (req, res) => {
   try {
@@ -1045,17 +1045,17 @@ app.get('/api/user/friends', authenticateUser, async (req, res) => {
             }
           }
           
-          if (friend) {
-            friendsList.push({
-              id: friend.id,
-              name: friend.name,
-              email: friend.email,
+        if (friend) {
+          friendsList.push({
+            id: friend.id,
+            name: friend.name,
+            email: friend.email,
               travelerProfile: friend.traveler_profile,
               lastKnownLocation: friend.last_known_location
-            });
+          });
           } else {
             console.log(`⚠️ Friend not found: ${friendId}`);
-          }
+        }
         } catch (friendError) {
           console.error(`Error looking up friend ${friendId}:`, friendError.message);
         }
@@ -1420,7 +1420,7 @@ app.get('/api/communities', async (req, res) => {
       }
       
       return {
-        ...community,
+      ...community,
         members,
         memberCount: members.length,
       };
@@ -1457,9 +1457,9 @@ app.get('/api/search', authenticateUser, async (req, res) => {
     const formattedUsers = matchedUsers.map(user => {
       const travelerProfile = user.traveler_profile || {};
       return {
-        id: user.id,
+          id: user.id,
         name: travelerProfile.name || user.name || 'Unknown User',
-        email: user.email,
+          email: user.email,
         nickname: travelerProfile.nickname || user.name || 'Unknown User',
         photo: travelerProfile.photo || null,
         travelerProfile: {
@@ -1691,7 +1691,7 @@ app.get('/api/posts', async (req, res) => {
         }
       }
 
-      return {
+          return {
         ...post,
         comments: enrichedComments,
         commentCount: enrichedComments.length,
@@ -2328,7 +2328,7 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     // Map frontend data structure to backend database structure
     // Persist both coordinates and location {lat,lng} for backward compatibility
     const locationPayload = { lat, lng, coordinates: { lat, lng }, latitude: lat, longitude: lng };
-    const poi = {
+  const poi = {
       name,
       location: locationPayload,
       photos: photo ? [photo] : [],
@@ -2590,7 +2590,7 @@ app.post('/api/posts/:postId/like', authenticateUser, async (req, res) => {
 
     // Initialize likes array if it doesn't exist
     const currentLikes = foundPost.likes || [];
-    
+
     // Toggle like
     const userNickname = user.traveler_profile?.nickname || user.name;
     const likeIndex = currentLikes.indexOf(userNickname);
@@ -3028,25 +3028,25 @@ app.use((error, req, res, next) => {
 
 // Start server function
 function startServer() {
-  app.listen(PORT, '0.0.0.0', () => {
-    const os = require('os');
-    const nets = os.networkInterfaces();
-    let hostIp = 'localhost';
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name] || []) {
-        if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
-          hostIp = net.address;
-          break;
-        }
+app.listen(PORT, '0.0.0.0', () => {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  let hostIp = 'localhost';
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+        hostIp = net.address;
+        break;
       }
-      if (hostIp !== 'localhost') break;
     }
-    console.log(`🚀 Backend server running on port ${PORT}`);
-    console.log(`🌐 Network accessible at: http://${hostIp}:${PORT}`);
-    console.log(`📡 GitHub AI: ${process.env.GITHUB_AI ? '✅' : '❌'}`);
-    console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
+    if (hostIp !== 'localhost') break;
+  }
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`🌐 Network accessible at: http://${hostIp}:${PORT}`);
+  console.log(`📡 GitHub AI: ${process.env.GITHUB_AI ? '✅' : '❌'}`);
+  console.log(`🗺️ Google Maps: ${process.env.GOOGLE_MAPS ? '✅' : '❌'}`);
     console.log(`🗄️ Database: ✅ PostgreSQL (Production Ready)`);
-    console.log(`🔗 CORS enabled for cross-origin requests`);
+  console.log(`🔗 CORS enabled for cross-origin requests`);
     
     // Log server status
     console.log('🚀 Backend server running on port', PORT);
@@ -3162,6 +3162,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
     res.status(500).json({ error: 'Failed to reset password' });
   }
 });
+
+// LLM Routes
+app.use('/api/llm', require('./routes/llm'));
 
 // Database migration endpoint - IMMEDIATE FIX
 app.post('/api/admin/migrate-database', async (req, res) => {
