@@ -2147,8 +2147,15 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
 
     const user = await dbService.getUserById(req.userId);
     if (!user) {
+      console.error('❌ User not found for ID:', req.userId);
       return res.status(401).json({ error: 'User not found' });
     }
+    
+    console.log('👤 User found:', { id: user.id, email: user.email, name: user.name });
+    
+    // Ensure user ID is properly formatted as string
+    const userId = String(user.id);
+    console.log('🆔 Using user ID:', userId);
 
     // Handle connected POI data - accept full POI object or existing POI ID
     let connectedPOIData = null;
@@ -2207,7 +2214,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     }
 
     const post = {
-      userId: user.id,
+      userId: userId,
       content,
       location: location || '',
       connectedPOI: connectedPOIData,
@@ -2217,7 +2224,9 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     };
 
     // Store post in database
+    console.log('📝 Creating post with data:', JSON.stringify(post, null, 2));
     const savedPost = await dbService.createPost(post);
+    console.log('✅ Post created successfully:', savedPost);
 
     // Update user's posts list
     const userPosts = user.posts || [];
@@ -2227,7 +2236,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
       location: savedPost.location,
       connectedPOI: savedPost.connected_poi,
       author: { 
-        id: user.id, 
+        id: userId, 
         email: user.email, 
         name: user.name,
         nickname: user.traveler_profile?.nickname || user.name,

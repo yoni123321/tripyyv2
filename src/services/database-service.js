@@ -642,27 +642,43 @@ class DatabaseService {
 
   // Post operations
   async createPost(postData) {
-    const query = `
-      INSERT INTO posts (user_id, content, photos, location, connected_poi, likes, comments, like_count, comment_count, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `;
-    
-    const values = [
-      postData.userId,
-      postData.content,
-      JSON.stringify(postData.photos || []),
-      postData.location || '',
-      JSON.stringify(postData.connectedPOI || null),
-      JSON.stringify(postData.likes || []),
-      JSON.stringify(postData.comments || []),
-      postData.likes?.length || 0,
-      postData.comments?.length || 0,
-      postData.createdAt
-    ];
-    
-    const result = await pool.query(query, values);
-    return result.rows[0];
+    try {
+      console.log('🗄️ Database: Creating post with data:', JSON.stringify(postData, null, 2));
+      
+      const query = `
+        INSERT INTO posts (user_id, content, photos, location, connected_poi, likes, comments, like_count, comment_count, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `;
+      
+      const values = [
+        postData.userId,
+        postData.content,
+        JSON.stringify(postData.photos || []),
+        postData.location || '',
+        JSON.stringify(postData.connectedPOI || null),
+        JSON.stringify(postData.likes || []),
+        JSON.stringify(postData.comments || []),
+        postData.likes?.length || 0,
+        postData.comments?.length || 0,
+        postData.createdAt ? new Date(postData.createdAt) : new Date()
+      ];
+      
+      console.log('🗄️ Database: Query values:', values);
+      
+      const result = await pool.query(query, values);
+      console.log('✅ Database: Post created successfully:', result.rows[0]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error creating post:', error);
+      console.error('❌ Database: Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint
+      });
+      throw error;
+    }
   }
 
   async getAllPosts() {
