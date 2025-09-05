@@ -2156,6 +2156,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     // Ensure user ID is properly formatted as string
     const userId = String(user.id);
     console.log('🆔 Using user ID:', userId);
+    console.log('🆔 User ID type:', typeof userId);
 
     // Handle connected POI data - accept full POI object or existing POI ID
     let connectedPOIData = null;
@@ -2214,7 +2215,7 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
     }
 
     const post = {
-      userId: userId,
+      userId: String(userId), // Ensure userId is always a string
       content,
       location: location || '',
       connectedPOI: connectedPOIData,
@@ -2222,6 +2223,9 @@ app.post('/api/posts', authenticateUser, async (req, res) => {
       comments: [],
       createdAt: new Date().toISOString(),
     };
+    
+    console.log('📝 Post data before database save:', JSON.stringify(post, null, 2));
+    console.log('📝 UserId type in post:', typeof post.userId);
 
     // Store post in database
     console.log('📝 Creating post with data:', JSON.stringify(post, null, 2));
@@ -3183,6 +3187,54 @@ app.post('/api/admin/migrate-database', async (req, res) => {
 // GET endpoint for easy browser access
 app.get('/api/admin/migrate-database', async (req, res) => {
   await migrateDatabaseEndpoint(req, res);
+});
+
+// Posts table migration endpoint
+app.get('/api/admin/migrate-posts-table', async (req, res) => {
+  try {
+    console.log('🔄 Starting posts table migration...');
+    
+    // Check current posts table structure
+    const tableInfo = await pool.query(`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns 
+      WHERE table_name = 'posts' AND column_name = 'user_id'
+    `);
+    
+    console.log('📊 Current posts user_id column info:', tableInfo.rows[0]);
+    
+    if (tableInfo.rows[0]?.data_type !== 'character varying') {
+      console.log('🔧 Converting posts user_id column to VARCHAR...');
+      
+      // Drop foreign key constraint first
+      await pool.query('ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_user_id_fkey');
+      
+      // Alter column type
+      await pool.query('ALTER TABLE posts ALTER COLUMN user_id TYPE VARCHAR(255)');
+      
+      // Recreate foreign key constraint
+      await pool.query('ALTER TABLE posts ADD CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)');
+      
+      console.log('✅ Posts table user_id column migrated to VARCHAR');
+      res.json({ 
+        success: true, 
+        message: 'Posts table user_id column migrated to VARCHAR successfully' 
+      });
+    } else {
+      console.log('✅ Posts table user_id column is already VARCHAR');
+      res.json({ 
+        success: true, 
+        message: 'Posts table user_id column is already VARCHAR' 
+      });
+    }
+  } catch (error) {
+    console.error('❌ Posts table migration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Posts table migration failed',
+      details: error.message 
+    });
+  }
 });
 
 // Shared migration logic

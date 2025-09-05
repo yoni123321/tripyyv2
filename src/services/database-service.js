@@ -645,6 +645,10 @@ class DatabaseService {
     try {
       console.log('🗄️ Database: Creating post with data:', JSON.stringify(postData, null, 2));
       
+      // Ensure userId is always a string to prevent INTEGER overflow errors
+      const userId = String(postData.userId);
+      console.log('🗄️ Database: UserId type check:', typeof userId, 'Value:', userId);
+      
       const query = `
         INSERT INTO posts (user_id, content, photos, location, connected_poi, likes, comments, like_count, comment_count, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -652,7 +656,7 @@ class DatabaseService {
       `;
       
       const values = [
-        postData.userId,
+        userId, // Use the string version of userId
         postData.content,
         JSON.stringify(postData.photos || []),
         postData.location || '',

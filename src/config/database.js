@@ -253,6 +253,18 @@ const initDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Ensure posts table user_id column is VARCHAR (migration for existing tables)
+    try {
+      await pool.query(`
+        ALTER TABLE posts 
+        ALTER COLUMN user_id TYPE VARCHAR(255)
+      `);
+      console.log('✅ Posts table user_id column verified as VARCHAR');
+    } catch (error) {
+      // Column might already be VARCHAR or table might not exist yet
+      console.log('ℹ️ Posts table user_id column type check:', error.message);
+    }
 
     // Communities table
     await pool.query(`
