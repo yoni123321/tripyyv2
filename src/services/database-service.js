@@ -204,6 +204,11 @@ class DatabaseService {
       values.push(JSON.stringify(updates.trips));
       console.log(`🔄 Setting trips to:`, JSON.stringify(updates.trips));
     }
+    if (updates.posts !== undefined) {
+      updateFields.push(`posts = $${valueIndex++}`);
+      values.push(JSON.stringify(updates.posts));
+      console.log(`🔄 Setting posts to:`, JSON.stringify(updates.posts));
+    }
     
     if (updateFields.length === 0) {
       throw new Error('No valid update fields provided');
