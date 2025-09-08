@@ -702,6 +702,12 @@ class DatabaseService {
     return result.rows[0];
   }
 
+  async getCommunityById(communityId) {
+    const query = 'SELECT * FROM communities WHERE id = $1';
+    const result = await pool.query(query, [communityId]);
+    return result.rows[0];
+  }
+
   async updatePost(postId, updates) {
     const updateFields = [];
     const values = [];
@@ -860,8 +866,8 @@ class DatabaseService {
       console.log('🗄️ Database: Creating report with data:', JSON.stringify(reportData, null, 2));
       
       const query = `
-        INSERT INTO reports (reporter_id, target_type, target_id, issue_type, description)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO reports (reporter_id, target_type, target_id, target_name, target_content, target_author, issue_type, description)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
       `;
       
@@ -869,6 +875,9 @@ class DatabaseService {
         String(reportData.reporterId), // Ensure string type
         reportData.targetType,
         String(reportData.targetId), // Ensure string type
+        reportData.targetName || null,
+        reportData.targetContent || null,
+        reportData.targetAuthor ? JSON.stringify(reportData.targetAuthor) : null,
         reportData.issueType,
         reportData.description
       ];
@@ -896,7 +905,12 @@ class DatabaseService {
       `;
       
       const result = await pool.query(query, [status, limit, offset]);
-      return result.rows;
+      
+      // Parse target_author JSONB field for each report
+      return result.rows.map(report => ({
+        ...report,
+        target_author: report.target_author ? JSON.parse(report.target_author) : null
+      }));
     } catch (error) {
       console.error('❌ Database: Error fetching reports:', error);
       throw error;
@@ -959,7 +973,17 @@ class DatabaseService {
       `;
       
       const result = await pool.query(query, [reportId]);
-      return result.rows[0];
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+      
+      // Parse target_author JSONB field
+      const report = result.rows[0];
+      return {
+        ...report,
+        target_author: report.target_author ? JSON.parse(report.target_author) : null
+      };
     } catch (error) {
       console.error('❌ Database: Error fetching report:', error);
       throw error;

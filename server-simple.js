@@ -259,6 +259,79 @@ const validateReportData = (data) => {
   return { valid: true };
 };
 
+// Helper function to fetch target data for reports
+const fetchTargetData = async (targetType, targetId) => {
+  try {
+    let targetData = { name: null, content: null, author: null };
+    
+    switch (targetType) {
+      case 'poi':
+        const poi = await dbService.getPOIById(targetId);
+        if (poi) {
+          targetData = {
+            name: poi.name,
+            content: poi.description,
+            author: {
+              id: poi.user_id,
+              name: poi.author,
+              type: 'poi_author'
+            }
+          };
+        }
+        break;
+        
+      case 'post':
+        const post = await dbService.getPostById(targetId);
+        if (post) {
+          const author = await dbService.getUserById(post.user_id);
+          targetData = {
+            name: `Post by ${author?.name || 'Unknown'}`,
+            content: post.content,
+            author: {
+              id: post.user_id,
+              name: author?.name,
+              email: author?.email,
+              type: 'post_author'
+            }
+          };
+        }
+        break;
+        
+      case 'comment':
+        // For comments, we might need to implement a getCommentById method
+        // For now, we'll return basic info
+        targetData = {
+          name: 'Comment',
+          content: 'Comment content not available',
+          author: { type: 'comment_author' }
+        };
+        break;
+        
+      case 'group':
+        const community = await dbService.getCommunityById(targetId);
+        if (community) {
+          const creator = await dbService.getUserById(community.created_by);
+          targetData = {
+            name: community.name,
+            content: community.description,
+            author: {
+              id: community.created_by,
+              name: creator?.name,
+              email: creator?.email,
+              type: 'group_creator'
+            }
+          };
+        }
+        break;
+    }
+    
+    return targetData;
+  } catch (error) {
+    console.error('Error fetching target data:', error);
+    return { name: null, content: null, author: null };
+  }
+};
+
 // Enhanced logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
@@ -3094,9 +3167,17 @@ app.get('/api/conversations/:conversationId/messages', authenticateUser, async (
 // Submit a report
 app.post('/api/reports', authenticateUser, async (req, res) => {
   try {
-    const { targetType, targetId, issueType, description } = req.body;
+    const { targetType, targetId, targetName, targetContent, targetAuthor, issueType, description } = req.body;
     
-    console.log('📝 Report submission request:', { targetType, targetId, issueType, description: description?.substring(0, 50) + '...' });
+    console.log('📝 Report submission request:', { 
+      targetType, 
+      targetId, 
+      targetName: targetName?.substring(0, 30) + '...', 
+      targetContent: targetContent?.substring(0, 50) + '...',
+      targetAuthor: targetAuthor ? 'Provided' : 'Not provided',
+      issueType, 
+      description: description?.substring(0, 50) + '...' 
+    });
     
     // Validate report data
     const validation = validateReportData({ targetType, targetId, issueType, description });
@@ -3110,11 +3191,27 @@ app.post('/api/reports', authenticateUser, async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
     
+    // Fetch target data if not provided
+    let finalTargetName = targetName;
+    let finalTargetContent = targetContent;
+    let finalTargetAuthor = targetAuthor;
+    
+    if (!targetName || !targetContent || !targetAuthor) {
+      console.log('🔍 Fetching target data for:', targetType, targetId);
+      const targetData = await fetchTargetData(targetType, targetId);
+      finalTargetName = targetName || targetData.name;
+      finalTargetContent = targetContent || targetData.content;
+      finalTargetAuthor = targetAuthor || targetData.author;
+    }
+    
     // Create report data
     const reportData = {
       reporterId: user.id,
       targetType,
       targetId,
+      targetName: finalTargetName,
+      targetContent: finalTargetContent,
+      targetAuthor: finalTargetAuthor,
       issueType,
       description
     };
@@ -3130,6 +3227,9 @@ app.post('/api/reports', authenticateUser, async (req, res) => {
         id: report.id,
         targetType: report.target_type,
         targetId: report.target_id,
+        targetName: report.target_name,
+        targetContent: report.target_content,
+        targetAuthor: report.target_author,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,
@@ -3164,6 +3264,9 @@ app.get('/api/reports', authenticateUser, async (req, res) => {
         id: report.id,
         targetType: report.target_type,
         targetId: report.target_id,
+        targetName: report.target_name,
+        targetContent: report.target_content,
+        targetAuthor: report.target_author,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,
@@ -3222,6 +3325,9 @@ app.put('/api/reports/:id', authenticateUser, async (req, res) => {
         id: report.id,
         targetType: report.target_type,
         targetId: report.target_id,
+        targetName: report.target_name,
+        targetContent: report.target_content,
+        targetAuthor: report.target_author,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,
@@ -3261,6 +3367,9 @@ app.get('/api/reports/:id', authenticateUser, async (req, res) => {
         id: report.id,
         targetType: report.target_type,
         targetId: report.target_id,
+        targetName: report.target_name,
+        targetContent: report.target_content,
+        targetAuthor: report.target_author,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,

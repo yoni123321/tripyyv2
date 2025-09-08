@@ -317,6 +317,9 @@ const initDatabase = async () => {
         reporter_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         target_type VARCHAR(20) NOT NULL CHECK (target_type IN ('poi', 'post', 'comment', 'group')),
         target_id VARCHAR(255) NOT NULL,
+        target_name VARCHAR(255),
+        target_content TEXT,
+        target_author JSONB,
         issue_type VARCHAR(50) NOT NULL CHECK (issue_type IN (
           'spam', 'harassment', 'inappropriate_content', 'fake_information', 
           'copyright_violation', 'hate_speech', 'violence', 'other'
@@ -376,6 +379,9 @@ const initDatabase = async () => {
     
     // Add missing columns to existing tables if they don't exist
     await addMissingColumns();
+    
+    // Add new report fields if they don't exist
+    await addReportFields();
     
   } catch (error) {
     console.error('❌ Error initializing database:', error);
@@ -461,6 +467,62 @@ const testConnection = async () => {
       fullError: error.stack
     });
     return false;
+  }
+};
+
+// Function to add new report fields
+const addReportFields = async () => {
+  try {
+    console.log('🔄 Adding new report fields...');
+    
+    // Add target_name column
+    try {
+      await pool.query(`
+        ALTER TABLE reports 
+        ADD COLUMN target_name VARCHAR(255)
+      `);
+      console.log('✅ Added target_name column to reports table');
+    } catch (error) {
+      if (error.message.includes('already exists')) {
+        console.log('ℹ️ target_name column already exists');
+      } else {
+        console.log('⚠️ Error adding target_name column:', error.message);
+      }
+    }
+    
+    // Add target_content column
+    try {
+      await pool.query(`
+        ALTER TABLE reports 
+        ADD COLUMN target_content TEXT
+      `);
+      console.log('✅ Added target_content column to reports table');
+    } catch (error) {
+      if (error.message.includes('already exists')) {
+        console.log('ℹ️ target_content column already exists');
+      } else {
+        console.log('⚠️ Error adding target_content column:', error.message);
+      }
+    }
+    
+    // Add target_author column
+    try {
+      await pool.query(`
+        ALTER TABLE reports 
+        ADD COLUMN target_author JSONB
+      `);
+      console.log('✅ Added target_author column to reports table');
+    } catch (error) {
+      if (error.message.includes('already exists')) {
+        console.log('ℹ️ target_author column already exists');
+      } else {
+        console.log('⚠️ Error adding target_author column:', error.message);
+      }
+    }
+    
+    console.log('✅ Report fields migration completed');
+  } catch (error) {
+    console.error('❌ Error adding report fields:', error);
   }
 };
 
