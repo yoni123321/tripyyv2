@@ -3167,79 +3167,70 @@ app.get('/api/conversations/:conversationId/messages', authenticateUser, async (
 // Submit a report
 app.post('/api/reports', authenticateUser, async (req, res) => {
   try {
-    const { targetType, targetId, targetName, targetContent, targetAuthor, issueType, description } = req.body;
-    
-    console.log('📝 Report submission request:', { 
+    const { 
       targetType, 
       targetId, 
-      targetName: targetName?.substring(0, 30) + '...', 
-      targetContent: targetContent?.substring(0, 50) + '...',
-      targetAuthor: targetAuthor ? 'Provided' : 'Not provided',
+      targetName,
+      targetContent,
+      targetAuthor,
       issueType, 
-      description: description?.substring(0, 50) + '...' 
-    });
-    
-    // Validate report data
-    const validation = validateReportData({ targetType, targetId, issueType, description });
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-    
-    // Get user from database
-    const user = await dbService.getUserById(req.userId);
+      description 
+    } = req.body;
+
+    // Get reporter info from the authenticated user
+    const reporterId = req.userId;
+    const user = await dbService.getUserById(reporterId);
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
     }
-    
-    // Fetch target data if not provided
-    let finalTargetName = targetName;
-    let finalTargetContent = targetContent;
-    let finalTargetAuthor = targetAuthor;
-    
-    if (!targetName || !targetContent || !targetAuthor) {
-      console.log('🔍 Fetching target data for:', targetType, targetId);
-      const targetData = await fetchTargetData(targetType, targetId);
-      finalTargetName = targetName || targetData.name;
-      finalTargetContent = targetContent || targetData.content;
-      finalTargetAuthor = targetAuthor || targetData.author;
-    }
-    
-    // Create report data
-    const reportData = {
-      reporterId: user.id,
-      targetType,
-      targetId,
-      targetName: finalTargetName,
-      targetContent: finalTargetContent,
-      targetAuthor: finalTargetAuthor,
-      issueType,
-      description
-    };
-    
-    // Insert report into database
-    const report = await dbService.createReport(reportData);
-    
-    console.log('📝 New report submitted:', report.id);
-    res.status(201).json({ 
-      success: true, 
-      message: 'Report submitted successfully',
-      report: {
-        id: report.id,
-        targetType: report.target_type,
-        targetId: report.target_id,
-        targetName: report.target_name,
-        targetContent: report.target_content,
-        targetAuthor: report.target_author,
-        issueType: report.issue_type,
-        description: report.description,
-        status: report.status,
-        createdAt: report.created_at
-      }
+
+    const reporterName = user.name;
+    const reporterEmail = user.email;
+
+    const result = await pool.query(
+      `INSERT INTO reports (
+        reporter_id, 
+        target_type, 
+        target_id, 
+        target_name,
+        target_content,
+        target_author,
+        issue_type, 
+        description, 
+        status, 
+        created_at, 
+        updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+      RETURNING *`,
+      [
+        reporterId,
+        targetType,
+        targetId,
+        targetName || null,
+        targetContent || null,
+        targetAuthor ? JSON.stringify(targetAuthor) : null,
+        issueType,
+        description,
+        'pending',
+        new Date(),
+        new Date()
+      ]
+    );
+
+    res.json({
+      success: true,
+      id: result.rows[0].id,
+      message: 'Report submitted successfully'
     });
-    
   } catch (error) {
-    console.error('❌ Error submitting report:', error);
-    res.status(500).json({ error: 'Failed to submit report' });
+    console.error('Error creating report:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create report' 
+    });
   }
 });
 
@@ -3249,39 +3240,50 @@ app.get('/api/reports', authenticateUser, async (req, res) => {
     // Check if user is admin
     const isAdmin = await isUserAdmin(req.userId);
     if (!isAdmin) {
-      return res.status(403).json({ error: 'Admin access required' });
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Admin privileges required.' 
+      });
     }
-    
-    const { status = 'pending', limit = 50, offset = 0 } = req.query;
-    
-    console.log('📊 Fetching reports:', { status, limit, offset });
-    
-    const reports = await dbService.getReports(status, parseInt(limit), parseInt(offset));
-    
-    res.json({ 
+
+    const result = await pool.query(`
+      SELECT 
+        r.*,
+        u.name as reporter_name,
+        u.email as reporter_email
+      FROM reports r
+      LEFT JOIN users u ON r.reporter_id = u.id
+      ORDER BY r.created_at DESC
+    `);
+
+    const reports = result.rows.map(report => ({
+      id: report.id,
+      targetType: report.target_type,
+      targetId: report.target_id,
+      targetName: report.target_name,
+      targetContent: report.target_content,
+      targetAuthor: report.target_author ? JSON.parse(report.target_author) : null,
+      issueType: report.issue_type,
+      description: report.description,
+      status: report.status,
+      adminNotes: report.admin_notes,
+      reporterName: report.reporter_name,
+      reporterEmail: report.reporter_email,
+      reviewedBy: report.reviewed_by,
+      createdAt: report.created_at,
+      updatedAt: report.updated_at
+    }));
+
+    res.json({
       success: true,
-      reports: reports.map(report => ({
-        id: report.id,
-        targetType: report.target_type,
-        targetId: report.target_id,
-        targetName: report.target_name,
-        targetContent: report.target_content,
-        targetAuthor: report.target_author,
-        issueType: report.issue_type,
-        description: report.description,
-        status: report.status,
-        adminNotes: report.admin_notes,
-        reporterName: report.reporter_name,
-        reporterEmail: report.reporter_email,
-        reviewedBy: report.reviewed_by,
-        createdAt: report.created_at,
-        updatedAt: report.updated_at
-      }))
+      data: { reports }
     });
-    
   } catch (error) {
-    console.error('❌ Error fetching reports:', error);
-    res.status(500).json({ error: 'Failed to fetch reports' });
+    console.error('Error fetching reports:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch reports' 
+    });
   }
 });
 

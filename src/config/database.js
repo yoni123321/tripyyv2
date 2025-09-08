@@ -475,50 +475,14 @@ const addReportFields = async () => {
   try {
     console.log('🔄 Adding new report fields...');
     
-    // Add target_name column
-    try {
-      await pool.query(`
-        ALTER TABLE reports 
-        ADD COLUMN target_name VARCHAR(255)
-      `);
-      console.log('✅ Added target_name column to reports table');
-    } catch (error) {
-      if (error.message.includes('already exists')) {
-        console.log('ℹ️ target_name column already exists');
-      } else {
-        console.log('⚠️ Error adding target_name column:', error.message);
-      }
-    }
-    
-    // Add target_content column
-    try {
-      await pool.query(`
-        ALTER TABLE reports 
-        ADD COLUMN target_content TEXT
-      `);
-      console.log('✅ Added target_content column to reports table');
-    } catch (error) {
-      if (error.message.includes('already exists')) {
-        console.log('ℹ️ target_content column already exists');
-      } else {
-        console.log('⚠️ Error adding target_content column:', error.message);
-      }
-    }
-    
-    // Add target_author column
-    try {
-      await pool.query(`
-        ALTER TABLE reports 
-        ADD COLUMN target_author JSONB
-      `);
-      console.log('✅ Added target_author column to reports table');
-    } catch (error) {
-      if (error.message.includes('already exists')) {
-        console.log('ℹ️ target_author column already exists');
-      } else {
-        console.log('⚠️ Error adding target_author column:', error.message);
-      }
-    }
+    // Add new report fields with IF NOT EXISTS
+    await pool.query(`
+      ALTER TABLE reports 
+      ADD COLUMN IF NOT EXISTS target_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS target_content TEXT,
+      ADD COLUMN IF NOT EXISTS target_author JSONB
+    `);
+    console.log('✅ Added new report fields to reports table');
     
     console.log('✅ Report fields migration completed');
   } catch (error) {
