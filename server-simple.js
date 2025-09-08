@@ -3256,23 +3256,42 @@ app.get('/api/reports', authenticateUser, async (req, res) => {
       ORDER BY r.created_at DESC
     `);
 
-    const reports = result.rows.map(report => ({
-      id: report.id,
-      targetType: report.target_type,
-      targetId: report.target_id,
-      targetName: report.target_name,
-      targetContent: report.target_content,
-      targetAuthor: report.target_author ? JSON.parse(report.target_author) : null,
-      issueType: report.issue_type,
-      description: report.description,
-      status: report.status,
-      adminNotes: report.admin_notes,
-      reporterName: report.reporter_name,
-      reporterEmail: report.reporter_email,
-      reviewedBy: report.reviewed_by,
-      createdAt: report.created_at,
-      updatedAt: report.updated_at
-    }));
+    const reports = result.rows.map(report => {
+      // Handle target_author parsing safely
+      let targetAuthor = null;
+      if (report.target_author) {
+        try {
+          // If it's already an object, use it directly
+          if (typeof report.target_author === 'object') {
+            targetAuthor = report.target_author;
+          } else {
+            // If it's a string, parse it
+            targetAuthor = JSON.parse(report.target_author);
+          }
+        } catch (error) {
+          console.error('Error parsing target_author:', error);
+          targetAuthor = null;
+        }
+      }
+
+      return {
+        id: report.id,
+        targetType: report.target_type,
+        targetId: report.target_id,
+        targetName: report.target_name,
+        targetContent: report.target_content,
+        targetAuthor: targetAuthor,
+        issueType: report.issue_type,
+        description: report.description,
+        status: report.status,
+        adminNotes: report.admin_notes,
+        reporterName: report.reporter_name,
+        reporterEmail: report.reporter_email,
+        reviewedBy: report.reviewed_by,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at
+      };
+    });
 
     res.json({
       success: true,
@@ -3320,6 +3339,22 @@ app.put('/api/reports/:id', authenticateUser, async (req, res) => {
     }
     
     console.log('✅ Report updated:', report.id);
+    
+    // Handle target_author parsing safely
+    let targetAuthor = null;
+    if (report.target_author) {
+      try {
+        if (typeof report.target_author === 'object') {
+          targetAuthor = report.target_author;
+        } else {
+          targetAuthor = JSON.parse(report.target_author);
+        }
+      } catch (error) {
+        console.error('Error parsing target_author:', error);
+        targetAuthor = null;
+      }
+    }
+    
     res.json({ 
       success: true, 
       message: 'Report updated successfully',
@@ -3329,7 +3364,7 @@ app.put('/api/reports/:id', authenticateUser, async (req, res) => {
         targetId: report.target_id,
         targetName: report.target_name,
         targetContent: report.target_content,
-        targetAuthor: report.target_author,
+        targetAuthor: targetAuthor,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,
@@ -3363,6 +3398,21 @@ app.get('/api/reports/:id', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Report not found' });
     }
     
+    // Handle target_author parsing safely
+    let targetAuthor = null;
+    if (report.target_author) {
+      try {
+        if (typeof report.target_author === 'object') {
+          targetAuthor = report.target_author;
+        } else {
+          targetAuthor = JSON.parse(report.target_author);
+        }
+      } catch (error) {
+        console.error('Error parsing target_author:', error);
+        targetAuthor = null;
+      }
+    }
+    
     res.json({ 
       success: true,
       report: {
@@ -3371,7 +3421,7 @@ app.get('/api/reports/:id', authenticateUser, async (req, res) => {
         targetId: report.target_id,
         targetName: report.target_name,
         targetContent: report.target_content,
-        targetAuthor: report.target_author,
+        targetAuthor: targetAuthor,
         issueType: report.issue_type,
         description: report.description,
         status: report.status,
