@@ -853,6 +853,228 @@ class DatabaseService {
     const result = await pool.query(searchQuery, [`%${query}%`]);
     return result.rows;
   }
+
+  // Report operations
+  async createReport(reportData) {
+    try {
+      console.log('🗄️ Database: Creating report with data:', JSON.stringify(reportData, null, 2));
+      
+      const query = `
+        INSERT INTO reports (reporter_id, target_type, target_id, issue_type, description)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      `;
+      
+      const values = [
+        String(reportData.reporterId), // Ensure string type
+        reportData.targetType,
+        String(reportData.targetId), // Ensure string type
+        reportData.issueType,
+        reportData.description
+      ];
+      
+      console.log('🗄️ Database: Report query values:', values);
+      
+      const result = await pool.query(query, values);
+      console.log('✅ Database: Report created successfully:', result.rows[0]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error creating report:', error);
+      throw error;
+    }
+  }
+
+  async getReports(status = 'pending', limit = 50, offset = 0) {
+    try {
+      const query = `
+        SELECT r.*, u.name as reporter_name, u.email as reporter_email
+        FROM reports r
+        JOIN users u ON r.reporter_id = u.id
+        WHERE r.status = $1
+        ORDER BY r.created_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+      
+      const result = await pool.query(query, [status, limit, offset]);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Database: Error fetching reports:', error);
+      throw error;
+    }
+  }
+
+  async updateReport(reportId, updates) {
+    try {
+      console.log('🗄️ Database: Updating report:', reportId, updates);
+      
+      const updateFields = [];
+      const values = [];
+      let valueIndex = 1;
+      
+      if (updates.status !== undefined) {
+        updateFields.push(`status = $${valueIndex++}`);
+        values.push(updates.status);
+      }
+      
+      if (updates.adminNotes !== undefined) {
+        updateFields.push(`admin_notes = $${valueIndex++}`);
+        values.push(updates.adminNotes);
+      }
+      
+      if (updates.reviewedBy !== undefined) {
+        updateFields.push(`reviewed_by = $${valueIndex++}`);
+        values.push(updates.reviewedBy);
+      }
+      
+      if (updateFields.length === 0) {
+        throw new Error('No fields to update');
+      }
+      
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(reportId);
+      
+      const query = `
+        UPDATE reports 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${valueIndex}
+        RETURNING *
+      `;
+      
+      const result = await pool.query(query, values);
+      console.log('✅ Database: Report updated successfully:', result.rows[0]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error updating report:', error);
+      throw error;
+    }
+  }
+
+  async getReportById(reportId) {
+    try {
+      const query = `
+        SELECT r.*, u.name as reporter_name, u.email as reporter_email
+        FROM reports r
+        JOIN users u ON r.reporter_id = u.id
+        WHERE r.id = $1
+      `;
+      
+      const result = await pool.query(query, [reportId]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error fetching report:', error);
+      throw error;
+    }
+  }
+
+  // Admin operations
+  async createAdmin(adminData) {
+    try {
+      console.log('🗄️ Database: Creating admin with data:', JSON.stringify(adminData, null, 2));
+      
+      const query = `
+        INSERT INTO admins (user_id, role, assigned_by, permissions)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id) 
+        DO UPDATE SET role = $2, assigned_by = $3, permissions = $4, updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `;
+      
+      const values = [
+        String(adminData.userId), // Ensure string type
+        adminData.role,
+        String(adminData.assignedBy), // Ensure string type
+        JSON.stringify(adminData.permissions || {})
+      ];
+      
+      console.log('🗄️ Database: Admin query values:', values);
+      
+      const result = await pool.query(query, values);
+      console.log('✅ Database: Admin created successfully:', result.rows[0]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error creating admin:', error);
+      throw error;
+    }
+  }
+
+  async getAdmins() {
+    try {
+      const query = `
+        SELECT a.*, u.name, u.email, u.created_at as user_created_at
+        FROM admins a
+        JOIN users u ON a.user_id = u.id
+        WHERE a.is_active = true
+        ORDER BY a.created_at DESC
+      `;
+      
+      const result = await pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Database: Error fetching admins:', error);
+      throw error;
+    }
+  }
+
+  async getAdminByUserId(userId) {
+    try {
+      const query = `
+        SELECT * FROM admins 
+        WHERE user_id = $1 AND is_active = true
+      `;
+      
+      const result = await pool.query(query, [String(userId)]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error fetching admin:', error);
+      throw error;
+    }
+  }
+
+  async updateAdmin(adminId, updates) {
+    try {
+      console.log('🗄️ Database: Updating admin:', adminId, updates);
+      
+      const updateFields = [];
+      const values = [];
+      let valueIndex = 1;
+      
+      if (updates.role !== undefined) {
+        updateFields.push(`role = $${valueIndex++}`);
+        values.push(updates.role);
+      }
+      
+      if (updates.permissions !== undefined) {
+        updateFields.push(`permissions = $${valueIndex++}`);
+        values.push(JSON.stringify(updates.permissions));
+      }
+      
+      if (updates.isActive !== undefined) {
+        updateFields.push(`is_active = $${valueIndex++}`);
+        values.push(updates.isActive);
+      }
+      
+      if (updateFields.length === 0) {
+        throw new Error('No fields to update');
+      }
+      
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(adminId);
+      
+      const query = `
+        UPDATE admins 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${valueIndex}
+        RETURNING *
+      `;
+      
+      const result = await pool.query(query, values);
+      console.log('✅ Database: Admin updated successfully:', result.rows[0]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Database: Error updating admin:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new DatabaseService();

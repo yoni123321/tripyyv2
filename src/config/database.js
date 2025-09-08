@@ -310,6 +310,65 @@ const initDatabase = async () => {
       ON llm_usage(user_id, month_year)
     `);
 
+    // Reports table for content moderation
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id SERIAL PRIMARY KEY,
+        reporter_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        target_type VARCHAR(20) NOT NULL CHECK (target_type IN ('poi', 'post', 'comment', 'group')),
+        target_id VARCHAR(255) NOT NULL,
+        issue_type VARCHAR(50) NOT NULL CHECK (issue_type IN (
+          'spam', 'harassment', 'inappropriate_content', 'fake_information', 
+          'copyright_violation', 'hate_speech', 'violence', 'other'
+        )),
+        description TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'reviewing', 'resolved', 'dismissed')),
+        admin_notes TEXT,
+        reviewed_by VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Admins table for user roles and permissions
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(20) DEFAULT 'moderator' CHECK (role IN ('moderator', 'admin', 'super_admin')),
+        permissions JSONB DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        assigned_by VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes for reports table
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_type, target_id)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at)
+    `);
+
+    // Create indexes for admins table
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admins_user_id ON admins(user_id)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admins_role ON admins(role)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admins_active ON admins(is_active)
+    `);
+
     console.log('✅ Database tables initialized successfully');
     
     // Run migration if needed

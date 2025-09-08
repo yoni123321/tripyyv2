@@ -199,6 +199,66 @@ const authenticateUser = (req, res, next) => {
   }
 };
 
+// Helper function to check if user is admin
+const isUserAdmin = async (userId) => {
+  try {
+    const result = await pool.query(`
+      SELECT role FROM admins WHERE user_id = $1 AND is_active = true
+    `, [userId]);
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    return false;
+  }
+};
+
+// Helper function to check if user is super admin
+const isUserSuperAdmin = async (userId) => {
+  try {
+    const result = await pool.query(`
+      SELECT role FROM admins WHERE user_id = $1 AND is_active = true AND role = 'super_admin'
+    `, [userId]);
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('Error checking super admin status:', error);
+    return false;
+  }
+};
+
+// Helper function to validate report data
+const validateReportData = (data) => {
+  const { targetType, targetId, issueType, description } = data;
+  
+  // Check required fields
+  if (!targetType || !targetId || !issueType || !description) {
+    return { valid: false, error: 'Missing required fields' };
+  }
+  
+  // Validate target type
+  const validTargetTypes = ['poi', 'post', 'comment', 'group'];
+  if (!validTargetTypes.includes(targetType)) {
+    return { valid: false, error: 'Invalid target type' };
+  }
+  
+  // Validate issue type
+  const validIssueTypes = ['spam', 'harassment', 'inappropriate_content', 'fake_information', 
+                          'copyright_violation', 'hate_speech', 'violence', 'other'];
+  if (!validIssueTypes.includes(issueType)) {
+    return { valid: false, error: 'Invalid issue type' };
+  }
+  
+  // Validate description length
+  if (description.length < 10) {
+    return { valid: false, error: 'Description must be at least 10 characters long' };
+  }
+  
+  if (description.length > 1000) {
+    return { valid: false, error: 'Description must be less than 1000 characters' };
+  }
+  
+  return { valid: true };
+};
+
 // Enhanced logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
@@ -3026,6 +3086,347 @@ app.get('/api/conversations/:conversationId/messages', authenticateUser, async (
   } catch (error) {
     console.error('Get conversation messages error:', error);
     res.status(500).json({ error: 'Failed to get conversation messages' });
+  }
+});
+
+// ==================== REPORTING SYSTEM ENDPOINTS ====================
+
+// Submit a report
+app.post('/api/reports', authenticateUser, async (req, res) => {
+  try {
+    const { targetType, targetId, issueType, description } = req.body;
+    
+    console.log('📝 Report submission request:', { targetType, targetId, issueType, description: description?.substring(0, 50) + '...' });
+    
+    // Validate report data
+    const validation = validateReportData({ targetType, targetId, issueType, description });
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
+    }
+    
+    // Get user from database
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    // Create report data
+    const reportData = {
+      reporterId: user.id,
+      targetType,
+      targetId,
+      issueType,
+      description
+    };
+    
+    // Insert report into database
+    const report = await dbService.createReport(reportData);
+    
+    console.log('📝 New report submitted:', report.id);
+    res.status(201).json({ 
+      success: true, 
+      message: 'Report submitted successfully',
+      report: {
+        id: report.id,
+        targetType: report.target_type,
+        targetId: report.target_id,
+        issueType: report.issue_type,
+        description: report.description,
+        status: report.status,
+        createdAt: report.created_at
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error submitting report:', error);
+    res.status(500).json({ error: 'Failed to submit report' });
+  }
+});
+
+// Get reports (admin only)
+app.get('/api/reports', authenticateUser, async (req, res) => {
+  try {
+    // Check if user is admin
+    const isAdmin = await isUserAdmin(req.userId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { status = 'pending', limit = 50, offset = 0 } = req.query;
+    
+    console.log('📊 Fetching reports:', { status, limit, offset });
+    
+    const reports = await dbService.getReports(status, parseInt(limit), parseInt(offset));
+    
+    res.json({ 
+      success: true,
+      reports: reports.map(report => ({
+        id: report.id,
+        targetType: report.target_type,
+        targetId: report.target_id,
+        issueType: report.issue_type,
+        description: report.description,
+        status: report.status,
+        adminNotes: report.admin_notes,
+        reporterName: report.reporter_name,
+        reporterEmail: report.reporter_email,
+        reviewedBy: report.reviewed_by,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at
+      }))
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching reports:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+// Update report status (admin only)
+app.put('/api/reports/:id', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNotes } = req.body;
+    
+    // Check if user is admin
+    const isAdmin = await isUserAdmin(req.userId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    // Validate status
+    const validStatuses = ['pending', 'reviewing', 'resolved', 'dismissed'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    
+    console.log('📝 Updating report:', { id, status, adminNotes });
+    
+    const updates = {
+      status,
+      adminNotes,
+      reviewedBy: req.userId
+    };
+    
+    const report = await dbService.updateReport(id, updates);
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    console.log('✅ Report updated:', report.id);
+    res.json({ 
+      success: true, 
+      message: 'Report updated successfully',
+      report: {
+        id: report.id,
+        targetType: report.target_type,
+        targetId: report.target_id,
+        issueType: report.issue_type,
+        description: report.description,
+        status: report.status,
+        adminNotes: report.admin_notes,
+        reviewedBy: report.reviewed_by,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating report:', error);
+    res.status(500).json({ error: 'Failed to update report' });
+  }
+});
+
+// Get specific report (admin only)
+app.get('/api/reports/:id', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user is admin
+    const isAdmin = await isUserAdmin(req.userId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const report = await dbService.getReportById(id);
+    
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    
+    res.json({ 
+      success: true,
+      report: {
+        id: report.id,
+        targetType: report.target_type,
+        targetId: report.target_id,
+        issueType: report.issue_type,
+        description: report.description,
+        status: report.status,
+        adminNotes: report.admin_notes,
+        reporterName: report.reporter_name,
+        reporterEmail: report.reporter_email,
+        reviewedBy: report.reviewed_by,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching report:', error);
+    res.status(500).json({ error: 'Failed to fetch report' });
+  }
+});
+
+// ==================== ADMIN MANAGEMENT ENDPOINTS ====================
+
+// Assign admin role
+app.post('/api/admin/assign', authenticateUser, async (req, res) => {
+  try {
+    const { userId, role = 'moderator' } = req.body;
+    
+    // Check if current user is super admin
+    const isSuperAdmin = await isUserSuperAdmin(req.userId);
+    if (!isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+    
+    // Validate role
+    const validRoles = ['moderator', 'admin', 'super_admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    
+    // Check if user exists
+    const user = await dbService.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('👑 Assigning admin role:', { userId, role, assignedBy: req.userId });
+    
+    // Create admin record
+    const adminData = {
+      userId,
+      role,
+      assignedBy: req.userId,
+      permissions: {}
+    };
+    
+    const admin = await dbService.createAdmin(adminData);
+    
+    console.log('✅ Admin assigned:', admin.id);
+    res.json({ 
+      success: true, 
+      message: 'Admin role assigned successfully',
+      admin: {
+        id: admin.id,
+        userId: admin.user_id,
+        role: admin.role,
+        permissions: admin.permissions,
+        isActive: admin.is_active,
+        assignedBy: admin.assigned_by,
+        createdAt: admin.created_at
+      },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error assigning admin:', error);
+    res.status(500).json({ error: 'Failed to assign admin role' });
+  }
+});
+
+// Get admin users
+app.get('/api/admin/users', authenticateUser, async (req, res) => {
+  try {
+    // Check if user is admin
+    const isAdmin = await isUserAdmin(req.userId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const admins = await dbService.getAdmins();
+    
+    res.json({ 
+      success: true,
+      admins: admins.map(admin => ({
+        id: admin.id,
+        userId: admin.user_id,
+        role: admin.role,
+        permissions: admin.permissions,
+        isActive: admin.is_active,
+        assignedBy: admin.assigned_by,
+        name: admin.name,
+        email: admin.email,
+        userCreatedAt: admin.user_created_at,
+        createdAt: admin.created_at,
+        updatedAt: admin.updated_at
+      }))
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching admins:', error);
+    res.status(500).json({ error: 'Failed to fetch admins' });
+  }
+});
+
+// Update admin role
+app.put('/api/admin/users/:id', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, isActive } = req.body;
+    
+    // Check if current user is super admin
+    const isSuperAdmin = await isUserSuperAdmin(req.userId);
+    if (!isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+    
+    // Validate role if provided
+    if (role) {
+      const validRoles = ['moderator', 'admin', 'super_admin'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+      }
+    }
+    
+    console.log('👑 Updating admin:', { id, role, isActive });
+    
+    const updates = {};
+    if (role !== undefined) updates.role = role;
+    if (isActive !== undefined) updates.isActive = isActive;
+    
+    const admin = await dbService.updateAdmin(id, updates);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+    
+    console.log('✅ Admin updated:', admin.id);
+    res.json({ 
+      success: true, 
+      message: 'Admin updated successfully',
+      admin: {
+        id: admin.id,
+        userId: admin.user_id,
+        role: admin.role,
+        permissions: admin.permissions,
+        isActive: admin.is_active,
+        assignedBy: admin.assigned_by,
+        createdAt: admin.created_at,
+        updatedAt: admin.updated_at
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating admin:', error);
+    res.status(500).json({ error: 'Failed to update admin' });
   }
 });
 
