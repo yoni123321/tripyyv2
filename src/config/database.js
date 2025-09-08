@@ -480,9 +480,17 @@ const addReportFields = async () => {
       ALTER TABLE reports 
       ADD COLUMN IF NOT EXISTS target_name VARCHAR(255),
       ADD COLUMN IF NOT EXISTS target_content TEXT,
-      ADD COLUMN IF NOT EXISTS target_author JSONB
+      ADD COLUMN IF NOT EXISTS target_author JSONB,
+      ADD COLUMN IF NOT EXISTS reporter_nickname VARCHAR(255)
     `);
     console.log('✅ Added new report fields to reports table');
+    
+    // Add index for reporter_nickname
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_reports_reporter_nickname 
+      ON reports(reporter_nickname)
+    `);
+    console.log('✅ Added reporter_nickname index to reports table');
     
     console.log('✅ Report fields migration completed');
   } catch (error) {

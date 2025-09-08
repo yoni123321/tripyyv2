@@ -1126,9 +1126,25 @@ app.get('/api/user/stats', authenticateUser, async (req, res) => {
   }
 });
 
-app.get('/api/user/stats/:userId', authenticateUser, async (req, res) => {
+app.get('/api/user/stats/:identifier', authenticateUser, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { identifier } = req.params;
+    let userId = identifier;
+    
+    // If identifier is not a number, try to resolve by nickname
+    if (isNaN(identifier)) {
+      const userResult = await pool.query(
+        'SELECT id FROM users WHERE traveler_profile->>\'nickname\' = $1',
+        [identifier]
+      );
+      
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      userId = userResult.rows[0].id;
+    }
+
     const user = await dbService.getUserById(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -1140,6 +1156,7 @@ app.get('/api/user/stats/:userId', authenticateUser, async (req, res) => {
     const userLikes = user.likes || 0;
 
     res.json({ 
+      success: true,
       data: {
         trips: userTrips.length,
         friends: userFriends.length,
@@ -3057,10 +3074,25 @@ app.get('/api/user/profile/:userId', authenticateUser, async (req, res) => {
 });
 
 // User trips endpoint
-app.get('/api/user/trips/:userId', authenticateUser, async (req, res) => {
+app.get('/api/user/trips/:identifier', authenticateUser, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { identifier } = req.params;
+    let userId = identifier;
     
+    // If identifier is not a number, try to resolve by nickname
+    if (isNaN(identifier)) {
+      const userResult = await pool.query(
+        'SELECT id FROM users WHERE traveler_profile->>\'nickname\' = $1',
+        [identifier]
+      );
+      
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      userId = userResult.rows[0].id;
+    }
+
     // Find user by ID
     const user = await dbService.getUserById(userId);
     
@@ -3073,7 +3105,7 @@ app.get('/api/user/trips/:userId', authenticateUser, async (req, res) => {
     
     console.log(`📋 Getting trips for user ${userId}:`, userTrips.length, 'trips');
     
-    res.json({ data: userTrips });
+    res.json({ success: true, data: userTrips });
   } catch (error) {
     console.error('❌ Error getting user trips:', error);
     res.status(500).json({ error: 'Failed to get user trips' });
@@ -3177,33 +3209,41 @@ app.post('/api/reports', authenticateUser, async (req, res) => {
       description 
     } = req.body;
 
-    // Get reporter info from the authenticated user
     const reporterId = req.userId;
-    const user = await dbService.getUserById(reporterId);
-    if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
+    
+    // Get reporter's nickname from their profile
+    let reporterNickname = '';
+    try {
+      const reporterProfile = await pool.query(
+        'SELECT traveler_profile FROM users WHERE id = $1',
+        [reporterId]
+      );
+      
+      if (reporterProfile.rows.length > 0) {
+        const travelerProfile = reporterProfile.rows[0].traveler_profile;
+        if (travelerProfile && travelerProfile.nickname) {
+          reporterNickname = travelerProfile.nickname;
+        }
+      }
+    } catch (profileError) {
+      console.log('Could not fetch reporter nickname:', profileError);
     }
-
-    const reporterName = user.name;
-    const reporterEmail = user.email;
 
     const result = await pool.query(
       `INSERT INTO reports (
         reporter_id, 
         target_type, 
         target_id, 
-        target_name,
-        target_content,
-        target_author,
+        target_name, 
+        target_content, 
+        target_author, 
         issue_type, 
         description, 
+        reporter_nickname,
         status, 
         created_at, 
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW(), NOW()) 
       RETURNING *`,
       [
         reporterId,
@@ -3214,16 +3254,13 @@ app.post('/api/reports', authenticateUser, async (req, res) => {
         targetAuthor ? JSON.stringify(targetAuthor) : null,
         issueType,
         description,
-        'pending',
-        new Date(),
-        new Date()
+        reporterNickname
       ]
     );
 
     res.json({
       success: true,
-      id: result.rows[0].id,
-      message: 'Report submitted successfully'
+      data: result.rows[0]
     });
   } catch (error) {
     console.error('Error creating report:', error);
@@ -3238,8 +3275,12 @@ app.post('/api/reports', authenticateUser, async (req, res) => {
 app.get('/api/reports', authenticateUser, async (req, res) => {
   try {
     // Check if user is admin
-    const isAdmin = await isUserAdmin(req.userId);
-    if (!isAdmin) {
+    const adminCheck = await pool.query(
+      'SELECT * FROM admins WHERE user_id = $1 AND is_active = true',
+      [req.userId]
+    );
+
+    if (adminCheck.rows.length === 0) {
       return res.status(403).json({ 
         success: false, 
         message: 'Access denied. Admin privileges required.' 
@@ -3250,47 +3291,28 @@ app.get('/api/reports', authenticateUser, async (req, res) => {
       SELECT 
         r.*,
         u.name as reporter_name,
-        u.email as reporter_email
+        u.email as reporter_email,
+        u.traveler_profile->>'nickname' as reporter_nickname
       FROM reports r
       LEFT JOIN users u ON r.reporter_id = u.id
       ORDER BY r.created_at DESC
     `);
 
+    // Parse target_author JSON safely
     const reports = result.rows.map(report => {
-      // Handle target_author parsing safely
-      let targetAuthor = null;
       if (report.target_author) {
         try {
-          // If it's already an object, use it directly
           if (typeof report.target_author === 'object') {
-            targetAuthor = report.target_author;
+            report.target_author = report.target_author;
           } else {
-            // If it's a string, parse it
-            targetAuthor = JSON.parse(report.target_author);
+            report.target_author = JSON.parse(report.target_author);
           }
-        } catch (error) {
-          console.error('Error parsing target_author:', error);
-          targetAuthor = null;
+        } catch (e) {
+          console.log('Error parsing target_author:', e);
+          report.target_author = null;
         }
       }
-
-      return {
-        id: report.id,
-        targetType: report.target_type,
-        targetId: report.target_id,
-        targetName: report.target_name,
-        targetContent: report.target_content,
-        targetAuthor: targetAuthor,
-        issueType: report.issue_type,
-        description: report.description,
-        status: report.status,
-        adminNotes: report.admin_notes,
-        reporterName: report.reporter_name,
-        reporterEmail: report.reporter_email,
-        reviewedBy: report.reviewed_by,
-        createdAt: report.created_at,
-        updatedAt: report.updated_at
-      };
+      return report;
     });
 
     res.json({
