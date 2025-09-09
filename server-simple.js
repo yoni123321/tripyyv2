@@ -2502,6 +2502,8 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
       reviews: [],
       averageRating: 0,
       reviewCount: 0,
+      likes: [],
+      likeCount: 0,
       createdAt: new Date().toISOString(),
       description: description || ''
     };
@@ -2531,7 +2533,9 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
       createdAt: savedPoi.created_at ?? null,
       reviews: savedPoi.reviews || [],
       averageRating: savedPoi.average_rating ?? 0,
-      reviewCount: savedPoi.review_count ?? 0
+      reviewCount: savedPoi.review_count ?? 0,
+      likes: savedPoi.likes ? JSON.parse(savedPoi.likes) : [],
+      likeCount: savedPoi.like_count ?? 0
     };
     
     console.log('📍 New POI added with ID:', savedPoiId);
@@ -2539,6 +2543,57 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('❌ Error adding POI:', error);
     res.status(500).json({ error: 'Failed to add POI' });
+  }
+}
+
+// Like/unlike a POI
+app.post('/api/pois/:poiId/like', authenticateUser, async (req, res) => {
+  try {
+    const { poiId } = req.params;
+    
+    // Get user info to get their nickname
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const userNickname = user.traveler_profile?.nickname || user.name || 'Unknown User';
+    
+    // Toggle like status
+    const updatedPoi = await dbService.togglePOILike(poiId, userNickname);
+    
+    // Parse likes array from JSON
+    const likes = updatedPoi.likes ? JSON.parse(updatedPoi.likes) : [];
+    
+    // Format response
+    const responsePoi = {
+      id: updatedPoi.id.toString(),
+      name: updatedPoi.name,
+      description: updatedPoi.description,
+      location: updatedPoi.location,
+      photos: updatedPoi.photos ? JSON.parse(updatedPoi.photos) : [],
+      icon: updatedPoi.icon,
+      type: updatedPoi.type,
+      author: updatedPoi.author,
+      user_id: updatedPoi.user_id,
+      reviews: updatedPoi.reviews ? JSON.parse(updatedPoi.reviews) : [],
+      average_rating: updatedPoi.average_rating,
+      review_count: updatedPoi.review_count,
+      likes: likes,
+      likeCount: updatedPoi.like_count,
+      created_at: updatedPoi.created_at
+    };
+
+    res.json({
+      success: true,
+      poi: responsePoi
+    });
+  } catch (error) {
+    console.error('❌ Error toggling POI like:', error);
+    if (error.message === 'POI not found') {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+    res.status(500).json({ error: 'Failed to toggle POI like' });
   }
 });
 
@@ -2707,7 +2762,8 @@ app.post('/api/pois/review', authenticateUser, async (req, res) => {
       authorPhoto: authorPhoto || user.traveler_profile?.photo || null,
       photo: photo || null,
       createdAt: new Date().toISOString(),
-      likes: []
+      likes: [],
+      likeCount: 0
     };
 
     currentReviews.push(newReview);
@@ -2733,6 +2789,43 @@ app.post('/api/pois/review', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('❌ Error adding POI review:', error);
     res.status(500).json({ error: 'Failed to add POI review' });
+  }
+});
+
+// Like/unlike a POI review
+app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { poiId } = req.body; // POI ID is required to find the review
+    
+    if (!poiId) {
+      return res.status(400).json({ error: 'POI ID is required' });
+    }
+    
+    // Get user info to get their nickname
+    const user = await dbService.getUserById(req.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const userNickname = user.traveler_profile?.nickname || user.name || 'Unknown User';
+    
+    // Toggle like status
+    const updatedReview = await dbService.toggleReviewLike(poiId, reviewId, userNickname);
+    
+    res.json({
+      success: true,
+      review: updatedReview
+    });
+  } catch (error) {
+    console.error('❌ Error toggling review like:', error);
+    if (error.message === 'POI not found') {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+    if (error.message === 'Review not found') {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+    res.status(500).json({ error: 'Failed to toggle review like' });
   }
 });
 

@@ -233,6 +233,8 @@ const initDatabase = async () => {
         reviews JSONB DEFAULT '[]',
         average_rating DECIMAL(3,2),
         review_count INTEGER DEFAULT 0,
+        likes JSONB DEFAULT '[]',
+        like_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -276,6 +278,52 @@ const initDatabase = async () => {
     } catch (error) {
       // Column might already be VARCHAR or table might not exist yet
       console.log('ℹ️ POIs table user_id column type check:', error.message);
+    }
+
+    // Add likes fields to POIs table (migration for existing tables)
+    try {
+      await pool.query(`
+        ALTER TABLE pois 
+        ADD COLUMN IF NOT EXISTS likes JSONB DEFAULT '[]',
+        ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0
+      `);
+      console.log('✅ POIs table likes fields added');
+    } catch (error) {
+      console.log('ℹ️ POIs table likes fields migration:', error.message);
+    }
+
+    // Migrate existing reviews to include likeCount field
+    try {
+      console.log('🔄 Migrating existing reviews to include likeCount...');
+      const pois = await pool.query('SELECT id, reviews FROM pois WHERE reviews IS NOT NULL');
+      
+      for (const poi of pois.rows) {
+        if (poi.reviews) {
+          const reviews = JSON.parse(poi.reviews);
+          let needsUpdate = false;
+          
+          const updatedReviews = reviews.map(review => {
+            if (review.likeCount === undefined) {
+              needsUpdate = true;
+              return {
+                ...review,
+                likeCount: review.likes ? review.likes.length : 0
+              };
+            }
+            return review;
+          });
+          
+          if (needsUpdate) {
+            await pool.query(
+              'UPDATE pois SET reviews = $1 WHERE id = $2',
+              [JSON.stringify(updatedReviews), poi.id]
+            );
+          }
+        }
+      }
+      console.log('✅ Existing reviews migrated with likeCount field');
+    } catch (error) {
+      console.log('ℹ️ Review migration:', error.message);
     }
 
     // Communities table

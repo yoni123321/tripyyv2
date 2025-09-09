@@ -496,8 +496,8 @@ class DatabaseService {
   // POI operations
   async createPOI(poiData) {
     const query = `
-      INSERT INTO pois (name, description, location, photos, icon, type, author, user_id, reviews, average_rating, review_count, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO pois (name, description, location, photos, icon, type, author, user_id, reviews, average_rating, review_count, likes, like_count, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `;
     
@@ -513,6 +513,8 @@ class DatabaseService {
       JSON.stringify(poiData.reviews || []),
       poiData.averageRating || 0,
       poiData.reviewCount || 0,
+      JSON.stringify(poiData.likes || []),
+      poiData.likeCount || 0,
       poiData.createdAt
     ];
     
@@ -536,6 +538,95 @@ class DatabaseService {
     const query = 'SELECT * FROM pois WHERE id = $1';
     const result = await pool.query(query, [id]);
     return result.rows[0];
+  }
+
+  async togglePOILike(poiId, userNickname) {
+    // Get current POI data
+    const poi = await this.getPOIById(poiId);
+    if (!poi) {
+      throw new Error('POI not found');
+    }
+
+    const currentLikes = poi.likes || [];
+    const likeIndex = currentLikes.indexOf(userNickname);
+    
+    let newLikes;
+    if (likeIndex > -1) {
+      // User already liked, remove them (unlike)
+      newLikes = currentLikes.filter(nickname => nickname !== userNickname);
+    } else {
+      // User hasn't liked, add them (like)
+      newLikes = [...currentLikes, userNickname];
+    }
+
+    // Update POI with new likes
+    const query = `
+      UPDATE pois 
+      SET likes = $1, like_count = $2 
+      WHERE id = $3 
+      RETURNING *
+    `;
+    const result = await pool.query(query, [
+      JSON.stringify(newLikes),
+      newLikes.length,
+      poiId
+    ]);
+
+    return result.rows[0];
+  }
+
+  async toggleReviewLike(poiId, reviewId, userNickname) {
+    // Get current POI data
+    const poi = await this.getPOIById(poiId);
+    if (!poi) {
+      throw new Error('POI not found');
+    }
+
+    const currentReviews = poi.reviews ? JSON.parse(poi.reviews) : [];
+    const reviewIndex = currentReviews.findIndex(review => review.id === reviewId);
+    
+    if (reviewIndex === -1) {
+      throw new Error('Review not found');
+    }
+
+    const review = currentReviews[reviewIndex];
+    const currentLikes = review.likes || [];
+    const likeIndex = currentLikes.indexOf(userNickname);
+    
+    let newLikes;
+    if (likeIndex > -1) {
+      // User already liked, remove them (unlike)
+      newLikes = currentLikes.filter(nickname => nickname !== userNickname);
+    } else {
+      // User hasn't liked, add them (like)
+      newLikes = [...currentLikes, userNickname];
+    }
+
+    // Update review with new likes and ensure likeCount is set
+    currentReviews[reviewIndex] = {
+      ...review,
+      likes: newLikes,
+      likeCount: newLikes.length
+    };
+
+    // Update POI with updated reviews
+    const query = `
+      UPDATE pois 
+      SET reviews = $1 
+      WHERE id = $2 
+      RETURNING *
+    `;
+    const result = await pool.query(query, [
+      JSON.stringify(currentReviews),
+      poiId
+    ]);
+
+    // Find and return the updated review
+    const updatedPoi = result.rows[0];
+    const updatedReviews = JSON.parse(updatedPoi.reviews);
+    const updatedReview = updatedReviews.find(r => r.id === reviewId);
+
+    return updatedReview;
   }
 
   // Verification token management
