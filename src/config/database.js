@@ -266,6 +266,18 @@ const initDatabase = async () => {
       console.log('ℹ️ Posts table user_id column type check:', error.message);
     }
 
+    // Ensure pois table user_id column is VARCHAR (migration for existing tables)
+    try {
+      await pool.query(`
+        ALTER TABLE pois 
+        ALTER COLUMN user_id TYPE VARCHAR(255)
+      `);
+      console.log('✅ POIs table user_id column verified as VARCHAR');
+    } catch (error) {
+      // Column might already be VARCHAR or table might not exist yet
+      console.log('ℹ️ POIs table user_id column type check:', error.message);
+    }
+
     // Communities table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS communities (

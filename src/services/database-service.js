@@ -509,7 +509,7 @@ class DatabaseService {
       poiData.icon || '',
       poiData.type || 'public',
       poiData.author || '',
-      poiData.userId,
+      String(poiData.userId), // Ensure userId is converted to string
       JSON.stringify(poiData.reviews || []),
       poiData.averageRating || 0,
       poiData.reviewCount || 0,
