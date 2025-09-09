@@ -2491,7 +2491,7 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     // Map frontend data structure to backend database structure
     // Persist both coordinates and location {lat,lng} for backward compatibility
     const locationPayload = { lat, lng, coordinates: { lat, lng }, latitude: lat, longitude: lng };
-  const poi = {
+    const poi = {
       name,
       location: locationPayload,
       photos: photo ? [photo] : [],
@@ -2544,7 +2544,7 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     console.error('❌ Error adding POI:', error);
     res.status(500).json({ error: 'Failed to add POI' });
   }
-}
+});
 
 // Like/unlike a POI
 app.post('/api/pois/:poiId/like', authenticateUser, async (req, res) => {
