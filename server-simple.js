@@ -2567,12 +2567,15 @@ app.post('/api/pois/:poiId/like', authenticateUser, async (req, res) => {
     if (updatedPoi.likes) {
       try {
         if (typeof updatedPoi.likes === 'string') {
+          console.log('🔍 Parsing likes string:', updatedPoi.likes);
           likes = JSON.parse(updatedPoi.likes);
         } else {
           likes = updatedPoi.likes;
         }
       } catch (error) {
         console.error('Error parsing likes:', error);
+        console.error('Likes value:', updatedPoi.likes);
+        console.error('Likes type:', typeof updatedPoi.likes);
         likes = [];
       }
     }

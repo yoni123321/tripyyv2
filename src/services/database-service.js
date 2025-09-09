@@ -547,7 +547,21 @@ class DatabaseService {
       throw new Error('POI not found');
     }
 
-    const currentLikes = poi.likes || [];
+    // Parse likes from JSON safely
+    let currentLikes = [];
+    if (poi.likes) {
+      try {
+        if (typeof poi.likes === 'string') {
+          currentLikes = JSON.parse(poi.likes);
+        } else {
+          currentLikes = poi.likes;
+        }
+      } catch (error) {
+        console.error('Error parsing likes in togglePOILike:', error);
+        currentLikes = [];
+      }
+    }
+    
     const likeIndex = currentLikes.indexOf(userNickname);
     
     let newLikes;
