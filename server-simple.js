@@ -2580,18 +2580,39 @@ app.post('/api/pois/:poiId/like', authenticateUser, async (req, res) => {
       }
     }
     
+    // Parse photos and reviews safely
+    let photos = [];
+    if (updatedPoi.photos) {
+      try {
+        photos = typeof updatedPoi.photos === 'string' ? JSON.parse(updatedPoi.photos) : updatedPoi.photos;
+      } catch (error) {
+        console.error('Error parsing photos:', error);
+        photos = [];
+      }
+    }
+
+    let reviews = [];
+    if (updatedPoi.reviews) {
+      try {
+        reviews = typeof updatedPoi.reviews === 'string' ? JSON.parse(updatedPoi.reviews) : updatedPoi.reviews;
+      } catch (error) {
+        console.error('Error parsing reviews:', error);
+        reviews = [];
+      }
+    }
+
     // Format response
     const responsePoi = {
       id: updatedPoi.id.toString(),
       name: updatedPoi.name,
       description: updatedPoi.description,
       location: updatedPoi.location,
-      photos: updatedPoi.photos ? JSON.parse(updatedPoi.photos) : [],
+      photos: photos,
       icon: updatedPoi.icon,
       type: updatedPoi.type,
       author: updatedPoi.author,
       user_id: updatedPoi.user_id,
-      reviews: updatedPoi.reviews ? JSON.parse(updatedPoi.reviews) : [],
+      reviews: reviews,
       average_rating: updatedPoi.average_rating,
       review_count: updatedPoi.review_count,
       likes: likes,
