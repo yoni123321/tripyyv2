@@ -582,7 +582,7 @@ class DatabaseService {
       throw new Error('POI not found');
     }
 
-    const currentReviews = poi.reviews ? JSON.parse(poi.reviews) : [];
+    const currentReviews = poi.reviews ? (typeof poi.reviews === 'string' ? JSON.parse(poi.reviews) : poi.reviews) : [];
     const reviewIndex = currentReviews.findIndex(review => review.id === reviewId);
     
     if (reviewIndex === -1) {

@@ -2562,8 +2562,20 @@ app.post('/api/pois/:poiId/like', authenticateUser, async (req, res) => {
     // Toggle like status
     const updatedPoi = await dbService.togglePOILike(poiId, userNickname);
     
-    // Parse likes array from JSON
-    const likes = updatedPoi.likes ? JSON.parse(updatedPoi.likes) : [];
+    // Parse likes array from JSON safely
+    let likes = [];
+    if (updatedPoi.likes) {
+      try {
+        if (typeof updatedPoi.likes === 'string') {
+          likes = JSON.parse(updatedPoi.likes);
+        } else {
+          likes = updatedPoi.likes;
+        }
+      } catch (error) {
+        console.error('Error parsing likes:', error);
+        likes = [];
+      }
+    }
     
     // Format response
     const responsePoi = {
@@ -2990,7 +3002,8 @@ app.post('/api/pois/review/like', authenticateUser, async (req, res) => {
     
     for (const poi of allPois) {
       if (poi.reviews) {
-        const review = poi.reviews.find(r => r.id === reviewId);
+        const reviews = typeof poi.reviews === 'string' ? JSON.parse(poi.reviews) : poi.reviews;
+        const review = reviews.find(r => r.id === reviewId);
         if (review) {
           foundReview = review;
           foundPoi = poi;
@@ -3021,8 +3034,9 @@ app.post('/api/pois/review/like', authenticateUser, async (req, res) => {
     }
     
     // Update POI in database
+    const reviews = typeof foundPoi.reviews === 'string' ? JSON.parse(foundPoi.reviews) : foundPoi.reviews;
     await dbService.updatePOI(foundPoi.id, {
-      reviews: foundPoi.reviews
+      reviews: reviews
     });
     
     console.log(`👍 Review ${reviewId} ${likeIndex === -1 ? 'liked' : 'unliked'} by ${userNickname}`);
