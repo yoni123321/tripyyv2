@@ -2932,6 +2932,43 @@ app.put('/api/pois/review/:reviewId', authenticateUser, async (req, res) => {
   }
 });
 
+// Delete a POI review
+app.delete('/api/pois/review/:reviewId', authenticateUser, async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { coordinates } = req.body;
+    
+    if (!coordinates) {
+      return res.status(400).json({ error: 'Coordinates are required' });
+    }
+
+    console.log(`🗑️ Deleting review ${reviewId} at ${coordinates.lat}, ${coordinates.lng}`);
+
+    // Find the POI by coordinates
+    const poi = await dbService.getPOIByCoordinates(coordinates.lat, coordinates.lng);
+    if (!poi) {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+
+    // Delete the review in the database
+    const updatedPoi = await dbService.deleteReview(reviewId);
+
+    if (!updatedPoi) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+
+    console.log(`🗑️ Review ${reviewId} deleted successfully`);
+    res.json({ 
+      success: true, 
+      poi: updatedPoi,
+      message: 'Review deleted successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error deleting POI review:', error);
+    res.status(500).json({ error: 'Failed to delete POI review' });
+  }
+});
+
 // Like/unlike a POI review
 app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) => {
   try {

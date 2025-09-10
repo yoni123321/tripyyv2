@@ -687,6 +687,47 @@ class DatabaseService {
     throw new Error('Review not found');
   }
 
+  async deleteReview(reviewId) {
+    // Get all POIs to find the one containing this review
+    const query = 'SELECT * FROM pois WHERE reviews IS NOT NULL';
+    const result = await pool.query(query);
+    
+    for (const poi of result.rows) {
+      const reviews = poi.reviews ? (typeof poi.reviews === 'string' ? JSON.parse(poi.reviews) : poi.reviews) : [];
+      const reviewIndex = reviews.findIndex(review => review.id === reviewId);
+      
+      if (reviewIndex !== -1) {
+        // Found the review, remove it
+        reviews.splice(reviewIndex, 1);
+        
+        // Update the POI with the modified reviews
+        const updateQuery = `
+          UPDATE pois 
+          SET reviews = $1, 
+              average_rating = $2,
+              review_count = $3
+          WHERE id = $4 
+          RETURNING *
+        `;
+        
+        // Calculate new average rating
+        const totalRating = reviews.reduce((sum, review) => sum + (review.rating || 0), 0);
+        const averageRating = reviews.length > 0 ? (totalRating / reviews.length).toFixed(2) : 0;
+        
+        const updateResult = await pool.query(updateQuery, [
+          JSON.stringify(reviews),
+          parseFloat(averageRating),
+          reviews.length,
+          poi.id
+        ]);
+        
+        return updateResult.rows[0];
+      }
+    }
+    
+    throw new Error('Review not found');
+  }
+
   // Verification token management
   async createVerificationToken(email, token, type, expiresAt) {
     const query = `
