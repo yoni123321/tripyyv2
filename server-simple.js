@@ -2912,9 +2912,15 @@ app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) =
     
     // Send notification to review author if they're not the one liking
     try {
+      console.log(`🔍 Looking for review ${reviewId} in POI ${poiId}`);
       const foundReview = await dbService.getReviewById(poiId, reviewId);
+      console.log(`🔍 Found review:`, foundReview);
+      
       if (foundReview && foundReview.user_id !== req.userId) {
+        console.log(`🔍 Review author ID: ${foundReview.user_id}, Current user ID: ${req.userId}`);
         const reviewAuthor = await dbService.getUserById(foundReview.user_id);
+        console.log(`🔍 Review author:`, reviewAuthor);
+        
         if (reviewAuthor && reviewAuthor.push_token) {
           const notification = {
             title: '❤️ Someone liked your review!',
@@ -2930,7 +2936,11 @@ app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) =
           
           await sendNotificationToUser(reviewAuthor.push_token, notification);
           console.log(`📱 Review like notification sent to user ${foundReview.user_id}`);
+        } else {
+          console.log(`❌ No push token for review author ${foundReview.user_id}`);
         }
+      } else {
+        console.log(`❌ Review not found or user is liking their own review`);
       }
     } catch (error) {
       console.error('❌ Error sending review like notification:', error);
