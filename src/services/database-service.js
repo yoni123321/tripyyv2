@@ -637,7 +637,7 @@ class DatabaseService {
 
     // Find and return the updated review
     const updatedPoi = result.rows[0];
-    const updatedReviews = JSON.parse(updatedPoi.reviews);
+    const updatedReviews = typeof updatedPoi.reviews === 'string' ? JSON.parse(updatedPoi.reviews) : updatedPoi.reviews;
     const updatedReview = updatedReviews.find(r => r.id === reviewId);
 
     return updatedReview;
