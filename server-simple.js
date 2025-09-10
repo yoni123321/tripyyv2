@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
+const { Expo } = require('expo-server-sdk');
 require('dotenv').config();
 
 const app = express();
@@ -14,6 +15,9 @@ const PORT = process.env.PORT || 3000;
 
 const { pool, initDatabase, testConnection } = require('./src/config/database');
 const dbService = require('./src/services/database-service');
+
+// Initialize Expo client
+const expo = new Expo();
 const emailService = require('./src/services/email-service');
 
 async function initializeServer() {
@@ -3741,6 +3745,151 @@ app.put('/api/admin/users/:id', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('❌ Error updating admin:', error);
     res.status(500).json({ error: 'Failed to update admin' });
+  }
+});
+
+// ==================== PUSH NOTIFICATIONS ENDPOINTS ====================
+
+// Register push token
+app.post('/api/notifications/register-token', authenticateUser, async (req, res) => {
+  try {
+    const { token } = req.body;
+    const userId = req.userId;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+
+    // Validate Expo push token
+    if (!Expo.isExpoPushToken(token)) {
+      return res.status(400).json({ error: 'Invalid Expo push token' });
+    }
+    
+    // Store token in database
+    await pool.query(
+      'UPDATE users SET push_token = $1 WHERE id = $2',
+      [token, userId]
+    );
+    
+    console.log(`📱 Push token registered for user ${userId}`);
+    res.json({ success: true, message: 'Push token registered successfully' });
+  } catch (error) {
+    console.error('❌ Error registering push token:', error);
+    res.status(500).json({ error: 'Failed to register push token' });
+  }
+});
+
+// Send notification to specific user
+app.post('/api/notifications/send', authenticateUser, async (req, res) => {
+  try {
+    const { targetUserId, notification } = req.body;
+    
+    if (!targetUserId || !notification) {
+      return res.status(400).json({ error: 'targetUserId and notification are required' });
+    }
+
+    if (!notification.title || !notification.body) {
+      return res.status(400).json({ error: 'Notification title and body are required' });
+    }
+    
+    // Get user's push token
+    const result = await pool.query(
+      'SELECT push_token, name FROM users WHERE id = $1',
+      [targetUserId]
+    );
+    
+    if (!result.rows[0]?.push_token) {
+      return res.status(404).json({ error: 'User push token not found' });
+    }
+    
+    // Create notification message
+    const message = {
+      to: result.rows[0].push_token,
+      sound: 'default',
+      title: notification.title,
+      body: notification.body,
+      data: notification.data || {}
+    };
+    
+    // Send notification
+    const chunks = expo.chunkPushNotifications([message]);
+    const tickets = [];
+    
+    for (let chunk of chunks) {
+      try {
+        let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+      } catch (error) {
+        console.error('❌ Error sending push notification:', error);
+      }
+    }
+    
+    console.log(`📤 Notification sent to user ${targetUserId} (${result.rows[0].name})`);
+    res.json({ success: true, tickets, message: 'Notification sent successfully' });
+  } catch (error) {
+    console.error('❌ Error sending notification:', error);
+    res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
+
+// Send notification to multiple users
+app.post('/api/notifications/send-multiple', authenticateUser, async (req, res) => {
+  try {
+    const { targetUserIds, notification } = req.body;
+    
+    if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+      return res.status(400).json({ error: 'targetUserIds array is required' });
+    }
+
+    if (!notification || !notification.title || !notification.body) {
+      return res.status(400).json({ error: 'Notification title and body are required' });
+    }
+    
+    // Get users' push tokens
+    const result = await pool.query(
+      'SELECT id, push_token, name FROM users WHERE id = ANY($1) AND push_token IS NOT NULL',
+      [targetUserIds]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No users with push tokens found' });
+    }
+    
+    // Create notification messages
+    const messages = result.rows.map(user => ({
+      to: user.push_token,
+      sound: 'default',
+      title: notification.title,
+      body: notification.body,
+      data: {
+        ...notification.data,
+        targetUserId: user.id
+      }
+    }));
+    
+    // Send notifications
+    const chunks = expo.chunkPushNotifications(messages);
+    const tickets = [];
+    
+    for (let chunk of chunks) {
+      try {
+        let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+      } catch (error) {
+        console.error('❌ Error sending push notification chunk:', error);
+      }
+    }
+    
+    console.log(`📤 Notifications sent to ${result.rows.length} users`);
+    res.json({ 
+      success: true, 
+      tickets, 
+      sentTo: result.rows.length,
+      message: `Notifications sent to ${result.rows.length} users successfully` 
+    });
+  } catch (error) {
+    console.error('❌ Error sending multiple notifications:', error);
+    res.status(500).json({ error: 'Failed to send notifications' });
   }
 });
 

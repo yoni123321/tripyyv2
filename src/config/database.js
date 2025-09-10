@@ -188,7 +188,8 @@ const initDatabase = async () => {
         communities JSONB DEFAULT '[]',
         trips JSONB DEFAULT '[]',
         last_known_location JSONB,
-        account_type VARCHAR(50) DEFAULT 'traveler'
+        account_type VARCHAR(50) DEFAULT 'traveler',
+        push_token TEXT
       )
     `);
 
@@ -324,6 +325,17 @@ const initDatabase = async () => {
       console.log('✅ Existing reviews migrated with likeCount field');
     } catch (error) {
       console.log('ℹ️ Review migration:', error.message);
+    }
+
+    // Add push_token column to users table (migration for existing tables)
+    try {
+      await pool.query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS push_token TEXT
+      `);
+      console.log('✅ Users table push_token column added');
+    } catch (error) {
+      console.log('ℹ️ Users table push_token column migration:', error.message);
     }
 
     // Communities table
