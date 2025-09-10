@@ -2860,7 +2860,8 @@ app.post('/api/pois/review', authenticateUser, async (req, res) => {
       photo: photo || null,
       createdAt: new Date().toISOString(),
       likes: [],
-      likeCount: 0
+      likeCount: 0,
+      user_id: user.id // Add user_id for notification purposes
     };
 
     currentReviews.push(newReview);
