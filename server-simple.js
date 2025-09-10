@@ -39,13 +39,9 @@ async function sendNotificationToUser(userId, notification) {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: {
-        ...notification.data,
-        icon: 'golden-dog',
-        color: '#FFD700'
-      },
+      data: notification.data || {},
       android: {
-        icon: 'golden-dog',
+        icon: 'ic_notification',
         color: '#FFD700',
         channelId: 'default',
         priority: 'high'
@@ -3935,13 +3931,9 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: {
-        ...notification.data,
-        icon: 'golden-dog',
-        color: '#FFD700'
-      },
+      data: notification.data || {},
       android: {
-        icon: 'golden-dog',
+        icon: 'ic_notification',
         color: '#FFD700',
         channelId: 'default',
         priority: 'high'
