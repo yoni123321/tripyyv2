@@ -40,13 +40,14 @@ async function sendNotificationToUser(userId, notification) {
       title: notification.title,
       body: notification.body,
       data: notification.data || {},
-      icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png',
       android: {
-        icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png',
-        color: '#FFD700'
+        icon: 'ic_notification',
+        color: '#FFD700',
+        channelId: 'default'
       },
       ios: {
-        sound: 'default'
+        sound: 'default',
+        badge: 1
       }
     };
     
@@ -3929,13 +3930,14 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       title: notification.title,
       body: notification.body,
       data: notification.data || {},
-      icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png',
       android: {
-        icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png',
-        color: '#FFD700'
+        icon: 'ic_notification',
+        color: '#FFD700',
+        channelId: 'default'
       },
       ios: {
-        sound: 'default'
+        sound: 'default',
+        badge: 1
       }
     };
     
