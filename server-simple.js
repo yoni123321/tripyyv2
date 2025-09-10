@@ -39,7 +39,8 @@ async function sendNotificationToUser(userId, notification) {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {}
+      data: notification.data || {},
+      icon: './assets/golden-dog.png'
     };
     
     // Send notification
@@ -3920,7 +3921,8 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {}
+      data: notification.data || {},
+      icon: './assets/golden-dog.png'
     };
     
     // Send notification
