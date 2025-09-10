@@ -39,8 +39,10 @@ async function sendNotificationToUser(userId, notification) {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
-      icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png'
+      data: {
+        ...notification.data,
+        icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png'
+      }
     };
     
     // Send notification
@@ -3921,8 +3923,10 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
-      icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png'
+      data: {
+        ...notification.data,
+        icon: 'https://res.cloudinary.com/djnd4utmi/image/upload/v1757524265/golden-dog_p6nsrz.png'
+      }
     };
     
     // Send notification
