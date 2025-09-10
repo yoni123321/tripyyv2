@@ -18,6 +18,46 @@ const dbService = require('./src/services/database-service');
 
 // Initialize Expo client
 const expo = new Expo();
+
+// Helper function to send notification to a user
+async function sendNotificationToUser(userId, notification) {
+  try {
+    // Get user's push token
+    const result = await pool.query(
+      'SELECT push_token, name FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (!result.rows[0]?.push_token) {
+      console.log(`📱 No push token found for user ${userId}`);
+      return;
+    }
+    
+    // Create notification message
+    const message = {
+      to: result.rows[0].push_token,
+      sound: 'default',
+      title: notification.title,
+      body: notification.body,
+      data: notification.data || {}
+    };
+    
+    // Send notification
+    const chunks = expo.chunkPushNotifications([message]);
+    
+    for (let chunk of chunks) {
+      try {
+        await expo.sendPushNotificationsAsync(chunk);
+      } catch (error) {
+        console.error('❌ Error sending push notification:', error);
+      }
+    }
+    
+    console.log(`📤 Notification sent to user ${userId} (${result.rows[0].name})`);
+  } catch (error) {
+    console.error('❌ Error in sendNotificationToUser:', error);
+  }
+}
 const emailService = require('./src/services/email-service');
 
 async function initializeServer() {
@@ -2905,6 +2945,29 @@ app.post('/api/posts/:postId/like', authenticateUser, async (req, res) => {
       like_count: currentLikes.length
     });
     
+    // Send notification if post was liked (not unliked) and not by the author
+    if (likeIndex === -1 && foundPost.user_id !== req.userId) {
+      try {
+        const notification = {
+          type: 'post_like',
+          title: '❤️ Post Liked',
+          body: `${userNickname} liked your post: "${foundPost.content ? foundPost.content.substring(0, 50) + (foundPost.content.length > 50 ? '...' : '') : 'Your post'}"`,
+          data: { 
+            type: 'post_like', 
+            likedBy: userNickname, 
+            postContent: foundPost.content,
+            postId: postId
+          }
+        };
+        
+        // Send notification using the internal function
+        await sendNotificationToUser(foundPost.user_id, notification);
+        console.log(`📱 Post like notification sent to user ${foundPost.user_id}`);
+      } catch (error) {
+        console.error('❌ Error sending post like notification:', error);
+      }
+    }
+    
     console.log(`👍 Post ${postId} ${likeIndex === -1 ? 'liked' : 'unliked'} by ${userNickname}`);
     res.json({ 
       success: true, 
@@ -3002,6 +3065,30 @@ app.post('/api/posts/:postId/comments/:commentId/like', authenticateUser, async 
       comment_count: foundPost.comments.length
     });
     
+    // Send notification if comment was liked (not unliked) and not by the comment author
+    if (idx === -1 && comment.userId !== req.userId) {
+      try {
+        const notification = {
+          type: 'comment_like',
+          title: '❤️ Comment Liked',
+          body: `${nickname} liked your comment: "${comment.text ? comment.text.substring(0, 50) + (comment.text.length > 50 ? '...' : '') : 'Your comment'}"`,
+          data: { 
+            type: 'comment_like', 
+            likedBy: nickname, 
+            commentContent: comment.text,
+            postId: postId,
+            commentId: commentId
+          }
+        };
+        
+        // Send notification using the internal function
+        await sendNotificationToUser(comment.userId, notification);
+        console.log(`📱 Comment like notification sent to user ${comment.userId}`);
+      } catch (error) {
+        console.error('❌ Error sending comment like notification:', error);
+      }
+    }
+    
     res.json({ data: { success: true, post: updatedPost } });
   } catch (error) {
     console.error('❌ Error liking comment:', error);
@@ -3066,6 +3153,31 @@ app.post('/api/pois/review/like', authenticateUser, async (req, res) => {
     await dbService.updatePOI(foundPoi.id, {
       reviews: reviews
     });
+    
+    // Send notification if review was liked (not unliked) and not by the review author
+    if (likeIndex === -1 && foundReview.user_id !== req.userId) {
+      try {
+        const notification = {
+          type: 'review_like',
+          title: '❤️ Review Liked',
+          body: `${userNickname} liked your review on ${foundPoi.name}: "${foundReview.text ? foundReview.text.substring(0, 50) + (foundReview.text.length > 50 ? '...' : '') : 'Your review'}"`,
+          data: { 
+            type: 'review_like', 
+            likedBy: userNickname, 
+            reviewContent: foundReview.text,
+            poiName: foundPoi.name,
+            poiId: foundPoi.id,
+            reviewId: reviewId
+          }
+        };
+        
+        // Send notification using the internal function
+        await sendNotificationToUser(foundReview.user_id, notification);
+        console.log(`📱 Review like notification sent to user ${foundReview.user_id}`);
+      } catch (error) {
+        console.error('❌ Error sending review like notification:', error);
+      }
+    }
     
     console.log(`👍 Review ${reviewId} ${likeIndex === -1 ? 'liked' : 'unliked'} by ${userNickname}`);
     res.json({ 
