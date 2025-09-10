@@ -643,23 +643,6 @@ class DatabaseService {
     return updatedReview;
   }
 
-  async getReviewById(poiId, reviewId) {
-    // Get current POI data
-    const poi = await this.getPOIById(poiId);
-    if (!poi) {
-      throw new Error('POI not found');
-    }
-
-    const currentReviews = poi.reviews ? (typeof poi.reviews === 'string' ? JSON.parse(poi.reviews) : poi.reviews) : [];
-    const review = currentReviews.find(r => r.id === reviewId);
-    
-    if (!review) {
-      throw new Error('Review not found');
-    }
-
-    return review;
-  }
-
   // Verification token management
   async createVerificationToken(email, token, type, expiresAt) {
     const query = `

@@ -2860,8 +2860,7 @@ app.post('/api/pois/review', authenticateUser, async (req, res) => {
       photo: photo || null,
       createdAt: new Date().toISOString(),
       likes: [],
-      likeCount: 0,
-      user_id: user.id // Add user_id for notification purposes
+      likeCount: 0
     };
 
     currentReviews.push(newReview);
@@ -2911,40 +2910,32 @@ app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) =
     // Toggle like status
     const updatedReview = await dbService.toggleReviewLike(poiId, reviewId, userNickname);
     
-    // Send notification to review author if they're not the one liking
-    try {
-      console.log(`🔍 Looking for review ${reviewId} in POI ${poiId}`);
-      const foundReview = await dbService.getReviewById(poiId, reviewId);
-      console.log(`🔍 Found review:`, foundReview);
-      
-      if (foundReview && foundReview.user_id !== req.userId) {
-        console.log(`🔍 Review author ID: ${foundReview.user_id}, Current user ID: ${req.userId}`);
-        const reviewAuthor = await dbService.getUserById(foundReview.user_id);
-        console.log(`🔍 Review author:`, reviewAuthor);
+    // Send notification if review was liked (not unliked) and not by the review author
+    if (updatedReview.likes && updatedReview.likes.includes(userNickname) && updatedReview.user_id !== req.userId) {
+      try {
+        // Get POI details for notification
+        const poi = await dbService.getPOIById(poiId);
         
-        if (reviewAuthor && reviewAuthor.push_token) {
-          const notification = {
-            title: '❤️ Someone liked your review!',
-            body: `${userNickname} liked your review`,
-            data: {
-              type: 'review_like',
-              reviewId: reviewId,
-              poiId: poiId,
-              likerId: req.userId,
-              likerName: userNickname
-            }
-          };
-          
-          await sendNotificationToUser(reviewAuthor.push_token, notification);
-          console.log(`📱 Review like notification sent to user ${foundReview.user_id}`);
-        } else {
-          console.log(`❌ No push token for review author ${foundReview.user_id}`);
-        }
-      } else {
-        console.log(`❌ Review not found or user is liking their own review`);
+        const notification = {
+          type: 'review_like',
+          title: '❤️ Review Liked',
+          body: `${userNickname} liked your review on ${poi.name}: "${updatedReview.text ? updatedReview.text.substring(0, 50) + (updatedReview.text.length > 50 ? '...' : '') : 'Your review'}"`,
+          data: { 
+            type: 'review_like', 
+            likedBy: userNickname, 
+            reviewContent: updatedReview.text,
+            poiName: poi.name,
+            poiId: poiId,
+            reviewId: reviewId
+          }
+        };
+        
+        // Send notification using the internal function
+        await sendNotificationToUser(updatedReview.user_id, notification);
+        console.log(`📱 Review like notification sent to user ${updatedReview.user_id}`);
+      } catch (error) {
+        console.error('❌ Error sending review like notification:', error);
       }
-    } catch (error) {
-      console.error('❌ Error sending review like notification:', error);
     }
     
     res.json({
