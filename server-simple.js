@@ -39,7 +39,11 @@ async function sendNotificationToUser(userId, notification) {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
+      data: {
+        ...notification.data,
+        icon: 'ic_notification',
+        color: '#FFD700'
+      },
       android: {
         icon: 'ic_notification',
         color: '#FFD700',
@@ -49,7 +53,9 @@ async function sendNotificationToUser(userId, notification) {
       ios: {
         sound: 'default',
         badge: 1,
-        categoryId: 'like'
+        categoryId: 'like',
+        icon: 'ic_notification',
+        color: '#FFD700'
       }
     };
     
@@ -3931,7 +3937,11 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
+      data: {
+        ...notification.data,
+        icon: 'ic_notification',
+        color: '#FFD700'
+      },
       android: {
         icon: 'ic_notification',
         color: '#FFD700',
@@ -3941,7 +3951,9 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       ios: {
         sound: 'default',
         badge: 1,
-        categoryId: 'like'
+        categoryId: 'like',
+        icon: 'ic_notification',
+        color: '#FFD700'
       }
     };
     
