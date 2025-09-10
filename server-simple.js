@@ -39,15 +39,21 @@ async function sendNotificationToUser(userId, notification) {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
+      data: {
+        ...notification.data,
+        icon: 'golden-dog',
+        color: '#FFD700'
+      },
       android: {
-        icon: 'ic_notification',
+        icon: 'golden-dog',
         color: '#FFD700',
-        channelId: 'default'
+        channelId: 'default',
+        priority: 'high'
       },
       ios: {
         sound: 'default',
-        badge: 1
+        badge: 1,
+        categoryId: 'like'
       }
     };
     
@@ -3929,15 +3935,21 @@ app.post('/api/notifications/send', authenticateUser, async (req, res) => {
       sound: 'default',
       title: notification.title,
       body: notification.body,
-      data: notification.data || {},
+      data: {
+        ...notification.data,
+        icon: 'golden-dog',
+        color: '#FFD700'
+      },
       android: {
-        icon: 'ic_notification',
+        icon: 'golden-dog',
         color: '#FFD700',
-        channelId: 'default'
+        channelId: 'default',
+        priority: 'high'
       },
       ios: {
         sound: 'default',
-        badge: 1
+        badge: 1,
+        categoryId: 'like'
       }
     };
     
