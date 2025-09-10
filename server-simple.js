@@ -2910,6 +2910,32 @@ app.post('/api/pois/review/:reviewId/like', authenticateUser, async (req, res) =
     // Toggle like status
     const updatedReview = await dbService.toggleReviewLike(poiId, reviewId, userNickname);
     
+    // Send notification to review author if they're not the one liking
+    try {
+      const foundReview = await dbService.getReviewById(poiId, reviewId);
+      if (foundReview && foundReview.user_id !== req.userId) {
+        const reviewAuthor = await dbService.getUserById(foundReview.user_id);
+        if (reviewAuthor && reviewAuthor.push_token) {
+          const notification = {
+            title: '❤️ Someone liked your review!',
+            body: `${userNickname} liked your review`,
+            data: {
+              type: 'review_like',
+              reviewId: reviewId,
+              poiId: poiId,
+              likerId: req.userId,
+              likerName: userNickname
+            }
+          };
+          
+          await sendNotificationToUser(reviewAuthor.push_token, notification);
+          console.log(`📱 Review like notification sent to user ${foundReview.user_id}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error sending review like notification:', error);
+    }
+    
     res.json({
       success: true,
       review: updatedReview
