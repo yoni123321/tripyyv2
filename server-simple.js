@@ -2506,9 +2506,45 @@ app.get('/api/pois', async (req, res) => {
         },
         // Map to camelCase for frontend consistency
         createdAt: poi.created_at ?? null,
-        reviews: poi.reviews || [],
+        reviews: (() => {
+          try {
+            if (poi.reviews && typeof poi.reviews === 'string') {
+              // Handle empty string case
+              if (poi.reviews.trim() === '') {
+                return [];
+              }
+              return JSON.parse(poi.reviews);
+            } else if (Array.isArray(poi.reviews)) {
+              return poi.reviews;
+            } else {
+              return [];
+            }
+          } catch (error) {
+            console.warn('⚠️ Error parsing reviews field in getAllPOIs:', error, 'Value:', poi.reviews);
+            return [];
+          }
+        })(),
         averageRating: poi.average_rating ?? 0,
-        reviewCount: poi.review_count ?? 0
+        reviewCount: poi.review_count ?? 0,
+        likes: (() => {
+          try {
+            if (poi.likes && typeof poi.likes === 'string') {
+              // Handle empty string case
+              if (poi.likes.trim() === '') {
+                return [];
+              }
+              return JSON.parse(poi.likes);
+            } else if (Array.isArray(poi.likes)) {
+              return poi.likes;
+            } else {
+              return [];
+            }
+          } catch (error) {
+            console.warn('⚠️ Error parsing likes field in getAllPOIs:', error, 'Value:', poi.likes);
+            return [];
+          }
+        })(),
+        likeCount: poi.like_count ?? 0
       };
     });
     
@@ -2576,6 +2612,8 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
     
     // Get the created POI to return
     const savedPoi = await dbService.getPOIById(savedPoiId);
+    console.log('🔍 Retrieved POI from database:', JSON.stringify(savedPoi, null, 2));
+    console.log('🔍 POI likes field type:', typeof savedPoi.likes, 'value:', savedPoi.likes);
     // Normalize response to include coordinates at top-level
     const loc = savedPoi.location || {};
     const respLat = typeof loc.lat === 'number' ? loc.lat : (typeof loc.latitude === 'number' ? loc.latitude : null);
@@ -2592,10 +2630,44 @@ app.post('/api/pois', authenticateUser, async (req, res) => {
       user: { id: savedPoi.user_id ?? null },
       // Map to camelCase for frontend consistency
       createdAt: savedPoi.created_at ?? null,
-      reviews: savedPoi.reviews || [],
+      reviews: (() => {
+        try {
+          if (savedPoi.reviews && typeof savedPoi.reviews === 'string') {
+            // Handle empty string case
+            if (savedPoi.reviews.trim() === '') {
+              return [];
+            }
+            return JSON.parse(savedPoi.reviews);
+          } else if (Array.isArray(savedPoi.reviews)) {
+            return savedPoi.reviews;
+          } else {
+            return [];
+          }
+        } catch (error) {
+          console.warn('⚠️ Error parsing reviews field:', error, 'Value:', savedPoi.reviews);
+          return [];
+        }
+      })(),
       averageRating: savedPoi.average_rating ?? 0,
       reviewCount: savedPoi.review_count ?? 0,
-      likes: savedPoi.likes ? JSON.parse(savedPoi.likes) : [],
+      likes: (() => {
+        try {
+          if (savedPoi.likes && typeof savedPoi.likes === 'string') {
+            // Handle empty string case
+            if (savedPoi.likes.trim() === '') {
+              return [];
+            }
+            return JSON.parse(savedPoi.likes);
+          } else if (Array.isArray(savedPoi.likes)) {
+            return savedPoi.likes;
+          } else {
+            return [];
+          }
+        } catch (error) {
+          console.warn('⚠️ Error parsing likes field:', error, 'Value:', savedPoi.likes);
+          return [];
+        }
+      })(),
       likeCount: savedPoi.like_count ?? 0
     };
     
