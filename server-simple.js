@@ -260,6 +260,24 @@ const authenticateUser = (req, res, next) => {
   }
 };
 
+// Helper function to check if token is older than 7 days
+const isTokenOlderThan7Days = (token) => {
+  try {
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.iat) {
+      return true; // If we can't decode or no issued at time, consider it old
+    }
+    
+    const issuedAt = new Date(decoded.iat * 1000);
+    const now = new Date();
+    const daysDifference = (now - issuedAt) / (1000 * 60 * 60 * 24);
+    
+    return daysDifference > 7;
+  } catch (error) {
+    return true; // If we can't decode, consider it old
+  }
+};
+
 // Helper function to check if user is admin
 const isUserAdmin = async (userId) => {
   try {
@@ -1052,6 +1070,71 @@ app.post('/api/auth/verify-email', async (req, res) => {
   } catch (error) {
     console.error('Email verification error:', error);
     res.status(500).json({ error: 'Email verification failed' });
+  }
+});
+
+// Token refresh endpoint
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+
+    // Check if token is older than 7 days
+    if (isTokenOlderThan7Days(token)) {
+      console.log('❌ Token refresh rejected: Token is older than 7 days');
+      return res.status(401).json({ 
+        error: 'Token expired. Please login again.',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+
+    // Verify the token is still valid
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (error) {
+      console.log('❌ Token refresh rejected: Invalid token');
+      return res.status(401).json({ 
+        error: 'Invalid token. Please login again.',
+        code: 'INVALID_TOKEN'
+      });
+    }
+
+    // Get user from database
+    const user = await dbService.getUserById(decoded.userId);
+    if (!user) {
+      console.log(`❌ Token refresh rejected: User not found: ${decoded.userId}`);
+      return res.status(404).json({ 
+        error: 'User not found. Please login again.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Update user's last login timestamp
+    await dbService.updateUser(user.email, { lastLogin: new Date() });
+
+    // Generate new token
+    const newToken = generateToken(user.id);
+
+    console.log(`✅ Token refreshed successfully for user: ${user.email}`);
+
+    res.json({
+      message: 'Token refreshed successfully',
+      token: newToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.emailVerified,
+        lastLogin: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
   }
 });
 
