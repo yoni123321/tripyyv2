@@ -27,7 +27,7 @@ const authenticateUser = (req, res, next) => {
  */
 router.post('/chat', authenticateUser, async (req, res) => {
   try {
-    const { message, context = {} } = req.body;
+    const { message, context = {}, processedPrompt, metadata = {} } = req.body;
     
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
@@ -39,12 +39,19 @@ router.post('/chat', authenticateUser, async (req, res) => {
     // Get user's account type from their profile (default to 'traveler')
     const accountType = req.user.accountType || 'traveler';
     
+    // Prepare processed data for unified processing
+    const processedData = processedPrompt ? {
+      processedPrompt,
+      metadata
+    } : null;
+    
     // Process chat request with rate limiting and usage tracking
     const result = await llmService.processChatRequest(
       req.userId,
       message,
       context,
-      accountType
+      accountType,
+      processedData
     );
 
     if (!result.success) {

@@ -166,7 +166,7 @@ class LLMService {
   /**
    * Process chat request with rate limiting and usage tracking
    */
-  async processChatRequest(userId, userMessage, context = {}, accountType = 'traveler') {
+  async processChatRequest(userId, userMessage, context = {}, accountType = 'traveler', processedData = null) {
     try {
       // Check rate limit
       const rateLimitCheck = await this.checkRateLimit(userId, accountType);
@@ -179,23 +179,49 @@ class LLMService {
         };
       }
 
-      // Prepare messages for Anthropic
-      const messages = [
-        {
-          role: 'user',
-          content: this.formatUserMessage(userMessage, context)
-        }
-      ];
+      // Unified processing logic
+      let messages, systemPrompt;
 
-      // System prompt for travel planning
-      const systemPrompt = `You are an AI travel planning assistant for Tripyy. Help users plan their perfect trip by:
-- Providing personalized travel recommendations
-- Suggesting activities based on interests and budget
-- Offering practical travel tips
-- Helping with itinerary planning
-- Considering destination-specific information
+      // Use unified processing if frontend sent processed data
+      if (processedData && processedData.processedPrompt) {
+        console.log('🔄 Using unified frontend processing for backend API');
+        
+        // The frontend's processedPrompt already contains the complete prompt
+        // Send it as a single user message to match frontend behavior
+        messages = [
+          {
+            role: 'user',
+            content: processedData.processedPrompt
+          }
+        ];
+        
+        // No system prompt needed - the processed prompt contains everything
+        systemPrompt = null;
+      } else {
+        // Fallback to old processing for backward compatibility
+        console.log('🔄 Using legacy backend processing (fallback)');
+        
+        messages = [
+          {
+            role: 'user',
+            content: this.formatUserMessage(userMessage, context)
+          }
+        ];
 
-Keep responses helpful, concise, and focused on travel planning.`;
+        systemPrompt = `You are a helpful travel planning assistant. 
+
+IMPORTANT RULES:
+1. Answer the user's question directly and concisely
+2. Only provide detailed travel advice when the user asks specific questions about destinations, activities, or planning
+3. For simple greetings like "hello", "hi", "hey", or "how are you", respond briefly (1-2 sentences) and ask what they'd like help with
+4. Keep responses concise and relevant to what the user actually asked
+5. Don't provide unsolicited detailed itineraries or recommendations unless specifically requested
+6. Ask clarifying questions if the user's request is vague
+7. Do NOT include any user preferences or trip details unless specifically asked for an itinerary
+8. Do NOT provide general recommendations or planning advice unless the user specifically asks for it
+
+Help the user with their travel-related question.`;
+      }
 
       // Send request to Anthropic
       const aiResponse = await this.sendChatRequest(messages, systemPrompt);
